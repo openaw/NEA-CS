@@ -4,7 +4,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFrame, QLabel, QLineEdit, QPushButton,
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
-    QStackedWidget
+    QStackedWidget, QTableWidget, QTableWidgetItem, QHeaderView
 )
 
 QSS = """
@@ -49,6 +49,14 @@ QListWidget#NavList {
     outline: none;
 }
 
+QPushButton#ProfileFooter {
+    text-align: left;
+    background: #121a24;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 0px;
+}
+
 QListWidget#NavList::item {
     padding: 10px 12px;
     margin: 4px 6px;
@@ -64,6 +72,14 @@ QListWidget#NavList::item:selected {
     background: rgba(118, 142, 255, 0.18);
     border: 1px solid rgba(118, 142, 255, 0.28);
     color: #f1f5ff;
+}
+
+QPushButton#ProfileFooter:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+QPushButton#ProfileFooter:pressed {
+    background: rgba(255,255,255,0.03);
 }
 
 /*##########Content##########*/
@@ -100,11 +116,33 @@ QListWidget#NavList::item:selected {
     color: rgba(215,221,232,0.65);
 }
 
-/*##########Placeholder charts##########*/
+/*##########Charts##########*/
 .ChartBox {
     background: rgba(11,16,22,0.65);
     border: 1px dashed rgba(255,255,255,0.10);
     border-radius: 12px;
+}
+
+/*##########List##########*/
+QTableWidget {
+    background: transparent;
+    border: none;
+}
+
+QHeaderView::section {
+    background: rgba(11,16,22,0.65);
+    border: none;
+    padding: 8px 10px;
+    font-weight: 700;
+    color: rgba(238,243,255,0.95);
+}
+
+QTableWidget::item {
+    padding: 8px 10px;
+}
+
+QTableWidget::item:selected {
+    background: rgba(118, 142, 255, 0.18);
 }
 
 /*##########Inputs / Buttons on pages##########*/
@@ -158,9 +196,49 @@ def make_card(title: str, kpi: str, caption: str):
     layout.addStretch(1)
     return card
 
+def make_reorder_table(title: str, height: int = 220):
+    card = QFrame()
+    card.setProperty("class", "Card")
+
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(16, 14, 16, 14)
+    layout.setSpacing(10)
+
+    card_title = QLabel(title)
+    card_title.setProperty("class", "CardTitle")
+    layout.addWidget(card_title)
+
+    table = QTableWidget()
+    table.setMinimumHeight(height)
+    table.setColumnCount(2)
+    table.setHorizontalHeaderLabels(["Item", "Quantity"])
+    table.setRowCount(3)
+
+    demo = [
+        ("Record1", 2),
+        ("Record2", 0),
+        ("Record3", 1),
+    ]
+    for x, (name, stock) in enumerate(demo):
+        table.setItem(x, 0, QTableWidgetItem(str(name)))
+        table.setItem(x, 1, QTableWidgetItem(str(stock)))
+
+    table.setEditTriggers(QTableWidget.NoEditTriggers)
+    table.setSelectionBehavior(QTableWidget.SelectRows)
+    table.setSelectionMode(QTableWidget.SingleSelection)
+    table.setShowGrid(False)
+    table.verticalHeader().setVisible(False)
+
+    hdr = table.horizontalHeader()
+    hdr.setSectionResizeMode(0, QHeaderView.Stretch)
+    hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+
+    layout.addWidget(table, 1)
+    return card
+
 #function to create repeatable chart card based widgets. layouts of widgets within cards and styles defined
 #placeholder until data visuals with Matplotlib are implemented
-def make_chart_placeholder(title: str, height: int = 220):
+def make_chart(title: str, height: int = 220):
     box = QFrame()
     box.setProperty("class", "Card")
     layout = QVBoxLayout(box)
@@ -217,24 +295,15 @@ class DashboardPage(QWidget):
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(14)
 
-        #top KPI card placeholder
-        grid.addWidget(make_card("Incoming Inventory", "150", "New Items Added\nOver the last month you got 150 new stocks added."), 0, 0)
-
-        #top chart placeholder (single)
-        main_chart = make_chart_placeholder("Incoming and Outgoing Chart", height=260)
-        grid.addWidget(main_chart, 0, 1, 1, 2)
-
-        #middle row card placeholder
-        grid.addWidget(make_chart_placeholder("Sales today", height=200), 1, 0)
-
-        #middle row product category placeholders
-        grid.addWidget(make_chart_placeholder("Incoming", height=200), 1, 1)
-        grid.addWidget(make_chart_placeholder("Outgoing", height=200), 1, 2)
-
+        #KPI card placeholder
+        grid.addWidget(make_card("Total Inventory Value", "150", "(£) total"), 0, 0)
+        grid.addWidget(make_card("Total Inventory", "20", "items"), 0, 1)
+        grid.addWidget(make_card("Total Inventory in Stock", "10", "items"), 0, 2)
+        grid.addWidget(make_reorder_table("Reorder List"), 0, 3)
         root.addLayout(grid)
 
         #bottom row chart placeholder (wide)
-        bottom = make_chart_placeholder("Top Outgoing Sources", height=180)
+        bottom = make_chart("Top Outgoing Sources", height=300)
         root.addWidget(bottom)
 
 #initialisation and layout/styles of items tab
@@ -340,19 +409,26 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(0)
         side_layout.addWidget(self.nav, 1)
 
-        #small footer/profile placeholder
-        footer = QFrame()
-        footer.setProperty("class", "Card")
-        fl = QVBoxLayout(footer)
+        # small footer/profile button
+        profile_btn = QPushButton()
+        profile_btn.setMinimumHeight(60)
+        profile_btn.setObjectName("ProfileFooter")
+        profile_btn.setCursor(Qt.PointingHandCursor)
+
+        fl = QVBoxLayout(profile_btn)
         fl.setContentsMargins(12, 10, 12, 10)
         fl.setSpacing(3)
+
         me = QLabel("Signed in")
         me.setProperty("class", "CardTitle")
+
         hint = QLabel("Account123")
         hint.setObjectName("Subtle")
+
         fl.addWidget(me)
         fl.addWidget(hint)
-        side_layout.addWidget(footer)
+
+        side_layout.addWidget(profile_btn)
 
         #main area
         main = QWidget()
