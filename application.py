@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import (
 )
 
 QSS = """
-
 /* overall general theme. QSS will be ported via file later when accessibility settings implemented*/
 
 /*##########Global##########*/
@@ -138,7 +137,6 @@ QPushButton:pressed {
 def make_card(title: str, kpi: str, caption: str):
     card = QFrame()
     card.setProperty("class", "Card")
-    card.setObjectName("Card")
 
     layout = QVBoxLayout(card)
     layout.setContentsMargins(16, 14, 16, 14)
@@ -146,15 +144,12 @@ def make_card(title: str, kpi: str, caption: str):
 
     card_title = QLabel(title)
     card_title.setProperty("class", "CardTitle")
-    card_title.setObjectName("CardTitle")
 
     card_num = QLabel(kpi)
     card_num.setProperty("class", "CardKPI")
-    card_num.setObjectName("CardKPI")
 
     card_caption = QLabel(caption)
     card_caption.setProperty("class", "CardCaption")
-    card_caption.setObjectName("CardCaption")
     card_caption.setWordWrap(True)
 
     layout.addWidget(card_title)
@@ -174,7 +169,6 @@ def make_chart_placeholder(title: str, height: int = 220):
 
     card_title = QLabel(title)
     card_title.setProperty("class", "CardTitle")
-    card_title.setObjectName("CardTitle")
 
     chart = QFrame()
     chart.setProperty("class", "ChartBox")
@@ -184,7 +178,6 @@ def make_chart_placeholder(title: str, height: int = 220):
     inner.setContentsMargins(10, 10, 10, 10)
     hint = QLabel("Chart placeholder")
     hint.setObjectName("Subtle")
-    hint.setProperty("class", "Subtle")
     hint.setAlignment(Qt.AlignCenter)
     inner.addStretch(1)
     inner.addWidget(hint)
@@ -205,11 +198,9 @@ class DashboardPage(QWidget):
         header = QHBoxLayout()
         title = QLabel("Page Analytics")
         title.setObjectName("PageTitle")
-        title.setProperty("class", "PageTitle")
 
         sub = QLabel("Overview of inventory, updates and trends.")
         sub.setObjectName("Subtle")
-        sub.setProperty("class", "Subtle")
 
         header_left = QVBoxLayout()
         header_left.setSpacing(3)
@@ -256,7 +247,6 @@ class ItemsPage(QWidget):
 
         title = QLabel("Items")
         title.setObjectName("PageTitle")
-        title.setProperty("class", "PageTitle")
         root.addWidget(title)
 
         panel = QFrame()
@@ -267,7 +257,6 @@ class ItemsPage(QWidget):
 
         hint = QLabel("A simple list.")
         hint.setObjectName("Subtle")
-        hint.setProperty("class", "Subtle")
 
         layout.addWidget(hint)
 
@@ -289,11 +278,9 @@ class SearchPage(QWidget):
 
         title = QLabel("Search")
         title.setObjectName("PageTitle")
-        title.setProperty("class", "PageTitle")
 
         desc = QLabel("A search layout with results panel.")
         desc.setObjectName("Subtle")
-        desc.setProperty("class", "Subtle")
 
         root.addWidget(title)
         root.addWidget(desc)
@@ -315,7 +302,6 @@ class SearchPage(QWidget):
 
         lab = QLabel("Results")
         lab.setProperty("class", "CardTitle")
-        lab.setObjectName("CardTitle")
 
 
 #initialisation and layout/styles of the main application and everything other than tabs
@@ -347,8 +333,6 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName("NavList")
         self.nav.setSpacing(2)
-        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         for name in ["☰ Dashboard", "❒ Items", "⌕ Search"]:
             QListWidgetItem(name, self.nav)
@@ -364,10 +348,8 @@ class MainWindow(QMainWindow):
         fl.setSpacing(3)
         me = QLabel("Signed in")
         me.setProperty("class", "CardTitle")
-        me.setObjectName("CardTitle")
         hint = QLabel("Account123")
         hint.setObjectName("Subtle")
-        hint.setProperty("class", "Subtle")
         fl.addWidget(me)
         fl.addWidget(hint)
         side_layout.addWidget(footer)
