@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 
 QSS = """
 
-/* overall general theme */
+/* overall general theme. QSS will be ported via file later when accessibility settings implemented*/
 
 /*##########Global##########*/
 QWidget {
@@ -168,9 +168,9 @@ def make_card(title: str, kpi: str, caption: str):
 def make_chart_placeholder(title: str, height: int = 220):
     box = QFrame()
     box.setProperty("class", "Card")
-    lay = QVBoxLayout(box)
-    lay.setContentsMargins(16, 14, 16, 14)
-    lay.setSpacing(10)
+    layout = QVBoxLayout(box)
+    layout.setContentsMargins(16, 14, 16, 14)
+    layout.setSpacing(10)
 
     card_title = QLabel(title)
     card_title.setProperty("class", "CardTitle")
@@ -190,8 +190,8 @@ def make_chart_placeholder(title: str, height: int = 220):
     inner.addWidget(hint)
     inner.addStretch(1)
 
-    lay.addWidget(card_title)
-    lay.addWidget(chart)
+    layout.addWidget(card_title)
+    layout.addWidget(chart)
     return box
 
 #initialisation and layout/styles of dashboard tab
@@ -261,47 +261,21 @@ class ItemsPage(QWidget):
 
         panel = QFrame()
         panel.setProperty("class", "Card")
-        lay = QVBoxLayout(panel)
-        lay.setContentsMargins(16, 16, 16, 16)
-        lay.setSpacing(10)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
 
         hint = QLabel("A simple list.")
         hint.setObjectName("Subtle")
         hint.setProperty("class", "Subtle")
 
-        lay.addWidget(hint)
-
-        #custom list design as unique
-        list_items = QListWidget()
-        list_items.setStyleSheet("""
-            QListWidget {
-                background: #0b1016;
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 12px;
-                padding: 6px;
-            }
-            QListWidget::item {
-                padding: 10px 10px;
-                margin: 4px;
-                border-radius: 10px;
-            }
-            QListWidget::item:hover { background: rgba(255,255,255,0.05); }
-            QListWidget::item:selected {
-                background: rgba(118,142,255,0.18);
-                border: 1px solid rgba(118,142,255,0.25);
-            }
-        """)
-
-        for i in range(1, 13):
-            QListWidgetItem(f"Item #{i}  •  status: active  •  updated: today", list_items)
-
-        lay.addWidget(list_items, 1)
+        layout.addWidget(hint)
 
         actions = QHBoxLayout()
         actions.addStretch(1)
         actions.addWidget(QPushButton("Add Item"))
         actions.addWidget(QPushButton("Remove"))
-        lay.addLayout(actions)
+        layout.addLayout(actions)
 
         root.addWidget(panel, 1)
 
@@ -335,47 +309,13 @@ class SearchPage(QWidget):
 
         results = QFrame()
         results.setProperty("class", "Card")
-        lay = QVBoxLayout(results)
-        lay.setContentsMargins(16, 16, 16, 16)
-        lay.setSpacing(10)
+        layout = QVBoxLayout(results)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
 
         lab = QLabel("Results")
         lab.setProperty("class", "CardTitle")
         lab.setObjectName("CardTitle")
-
-        #custom list design as unique
-        self.results_list = QListWidget()
-        self.results_list.setStyleSheet("""
-            QListWidget {
-                background: #0b1016;
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 12px;
-                padding: 6px;
-            }
-            QListWidget::item {
-                padding: 10px 10px;
-                margin: 4px;
-                border-radius: 10px;
-            }
-            QListWidget::item:hover { background: rgba(255,255,255,0.05); }
-        """)
-
-        lay.addWidget(lab)
-        lay.addWidget(self.results_list, 1)
-        root.addWidget(results, 1)
-
-        #placeholder function for searching items in list
-        def do_search():
-            q = self.query.text().strip()
-            self.results_list.clear()
-            if not q:
-                QListWidgetItem("Type something to search.", self.results_list)
-                return
-            for i in range(1, 6):
-                QListWidgetItem(f"Result {i} for “{q}”", self.results_list)
-
-        btn.clicked.connect(do_search)
-        self.query.returnPressed.connect(do_search)
 
 
 #initialisation and layout/styles of the main application and everything other than tabs
@@ -425,7 +365,7 @@ class MainWindow(QMainWindow):
         me = QLabel("Signed in")
         me.setProperty("class", "CardTitle")
         me.setObjectName("CardTitle")
-        hint = QLabel("you@example.com")
+        hint = QLabel("Account123")
         hint.setObjectName("Subtle")
         hint.setProperty("class", "Subtle")
         fl.addWidget(me)
@@ -462,8 +402,8 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(QSS)
-    w = MainWindow()
-    w.show()
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
