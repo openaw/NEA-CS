@@ -196,6 +196,7 @@ def make_card(title: str, kpi: str, caption: str):
     layout.addStretch(1)
     return card
 
+#function to create repeatable list card based widgets. layouts of widgets within cards and styles defined
 def make_reorder_table(title: str, height: int = 220):
     card = QFrame()
     card.setProperty("class", "Card")
@@ -208,17 +209,18 @@ def make_reorder_table(title: str, height: int = 220):
     card_title.setProperty("class", "CardTitle")
     layout.addWidget(card_title)
 
-    table = QTableWidget()
-    table.setMinimumHeight(height)
-    table.setColumnCount(2)
-    table.setHorizontalHeaderLabels(["Item", "Quantity"])
-    table.setRowCount(3)
-
     demo = [
         ("Record1", 2),
         ("Record2", 0),
         ("Record3", 1),
     ]
+    
+    table = QTableWidget()
+    table.setMinimumHeight(height)
+    table.setColumnCount(2)
+    table.setHorizontalHeaderLabels(["Item", "Quantity"])
+    table.setRowCount(len(demo))
+
     for x, (name, stock) in enumerate(demo):
         table.setItem(x, 0, QTableWidgetItem(str(name)))
         table.setItem(x, 1, QTableWidgetItem(str(stock)))
@@ -228,10 +230,6 @@ def make_reorder_table(title: str, height: int = 220):
     table.setSelectionMode(QTableWidget.SingleSelection)
     table.setShowGrid(False)
     table.verticalHeader().setVisible(False)
-
-    hdr = table.horizontalHeader()
-    hdr.setSectionResizeMode(0, QHeaderView.Stretch)
-    hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
 
     layout.addWidget(table, 1)
     return card
@@ -303,7 +301,7 @@ class DashboardPage(QWidget):
         root.addLayout(grid)
 
         #bottom row chart placeholder (wide)
-        bottom = make_chart("Top Outgoing Sources", height=300)
+        bottom = make_chart("Top 10 Inventory (Quantity)", height=300)
         root.addWidget(bottom)
 
 #initialisation and layout/styles of items tab
@@ -378,7 +376,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TrackStock")
-        self.resize(1100, 680)
+        self.resize(1200, 680)
 
         #central container
         central = QWidget()
@@ -413,7 +411,7 @@ class MainWindow(QMainWindow):
         profile_btn = QPushButton()
         profile_btn.setMinimumHeight(60)
         profile_btn.setObjectName("ProfileFooter")
-        profile_btn.setCursor(Qt.PointingHandCursor)
+        profile_btn.setCursor(Qt.PointingHandCursor) #Intuitive feature as unclear if is button
 
         fl = QVBoxLayout(profile_btn)
         fl.setContentsMargins(12, 10, 12, 10)
