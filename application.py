@@ -4,7 +4,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFrame, QLabel, QLineEdit, QPushButton,
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QHeaderView
+    QStackedWidget, QTableWidget, QTableWidgetItem
 )
 
 QSS = """
@@ -172,7 +172,7 @@ QPushButton:pressed {
 """
 
 #function to create repeatable card based widgets. layouts of widgets within cards and styles defined
-def make_card(title: str, kpi: str, caption: str):
+def make_card(title, kpi, caption):
     card = QFrame()
     card.setProperty("class", "Card")
 
@@ -197,7 +197,7 @@ def make_card(title: str, kpi: str, caption: str):
     return card
 
 #function to create repeatable list card based widgets. layouts of widgets within cards and styles defined
-def make_reorder_table(title: str, height: int = 220):
+def make_reorder_table(title, height=220):
     card = QFrame()
     card.setProperty("class", "Card")
 
@@ -236,7 +236,7 @@ def make_reorder_table(title: str, height: int = 220):
 
 #function to create repeatable chart card based widgets. layouts of widgets within cards and styles defined
 #placeholder until data visuals with Matplotlib are implemented
-def make_chart(title: str, height: int = 220):
+def make_chart(title, height=220):
     box = QFrame()
     box.setProperty("class", "Card")
     layout = QVBoxLayout(box)
@@ -357,18 +357,9 @@ class SearchPage(QWidget):
         self.query.setPlaceholderText("Search items, pages, or users…")
         btn = QPushButton("Search")
 
-        row.addWidget(self.query, 1)
+        row.addWidget(self.query)
         row.addWidget(btn)
         root.addLayout(row)
-
-        results = QFrame()
-        results.setProperty("class", "Card")
-        layout = QVBoxLayout(results)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        lab = QLabel("Results")
-        lab.setProperty("class", "CardTitle")
 
 
 #initialisation and layout/styles of the main application and everything other than tabs
@@ -407,11 +398,11 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(0)
         side_layout.addWidget(self.nav, 1)
 
-        # small footer/profile button
+        #small footer/profile button
         profile_btn = QPushButton()
         profile_btn.setMinimumHeight(60)
         profile_btn.setObjectName("ProfileFooter")
-        profile_btn.setCursor(Qt.PointingHandCursor) #Intuitive feature as unclear if is button
+        profile_btn.setCursor(Qt.PointingHandCursor) #intuitive feature as unclear if is button
 
         fl = QVBoxLayout(profile_btn)
         fl.setContentsMargins(12, 10, 12, 10)
