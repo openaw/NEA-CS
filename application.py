@@ -1,10 +1,10 @@
-import sys
+import sys, os, json, hashlib
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFrame, QLabel, QLineEdit, QPushButton,
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
-    QStackedWidget, QTableWidget, QTableWidgetItem
+    QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox, QRadioButton
 )
 
 QSS = """
@@ -170,6 +170,362 @@ QPushButton:pressed {
     background: rgba(118, 142, 255, 0.14);
 }
 """
+
+#current working directory dynamic, change file name here
+ACCOUNTS_PATH = "accounts.json"
+
+def load_accounts(path = ACCOUNTS_PATH):
+    #return dict of accounts, false if file missing
+    if not os.path.exists(path):
+        return {}
+    else:
+        with open(path, "r") as file:
+            data = json.load(file)
+        return data
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+class InitialAccountCreation(QDialog):
+    def __init__(self, accounts_path = ACCOUNTS_PATH):
+        super().__init__()
+        self.accounts_path = accounts_path
+        self.created_username = None
+
+        self.setWindowTitle("Initial Account Creation - TrackStock")
+        self.setModal(True)
+        self.resize(520, 360)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(14)
+
+        title = QLabel("Create your admin account")
+        title.setObjectName("PageTitle")
+
+        hint = QLabel("No accounts found on this device. Create one to continue.")
+        hint.setObjectName("Subtle")
+        hint.setWordWrap(True)
+
+        root.addWidget(title)
+        root.addWidget(hint)
+
+        card = QFrame()
+        card.setProperty("class", "Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(10)
+
+        form = QGridLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Username (min 3 chars)")
+
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setPlaceholderText("Password (min 6 chars)")
+
+        self.confirm = QLineEdit()
+        self.confirm.setEchoMode(QLineEdit.Password)
+        self.confirm.setPlaceholderText("Confirm password")
+
+        form.addWidget(QLabel("Username"), 0, 0)
+        form.addWidget(self.username, 0, 1)
+        form.addWidget(QLabel("Password"), 1, 0)
+        form.addWidget(self.password, 1, 1)
+        form.addWidget(QLabel("Confirm"), 2, 0)
+        form.addWidget(self.confirm, 2, 1)
+
+        card_layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+
+        exit_btn = QPushButton("Exit")
+        exit_btn.clicked.connect(self.reject)
+
+        create_btn = QPushButton("Create account")
+        create_btn.clicked.connect(self.create_account)
+
+        btn_row.addWidget(exit_btn)
+        btn_row.addWidget(create_btn)
+
+        card_layout.addLayout(btn_row)
+        root.addWidget(card)
+
+    def create_account(self):
+        u = self.username.text().strip()
+        p = self.password.text()
+        c = self.confirm.text()
+
+        if len(u) < 3:
+            QMessageBox.warning(self, "Invalid username", "Username must be at least 3 characters.")
+            return
+        if len(p) < 6:
+            QMessageBox.warning(self, "Weak password", "Password must be at least 6 characters.")
+            return
+        if p != c:
+            QMessageBox.warning(self, "Mismatch", "Passwords do not match.")
+            return
+
+        accounts = load_accounts(self.accounts_path)
+        accounts[u] = {"password_hash": hash_password(p),
+                       "user_level": "Super Admin"}
+        with open(self.accounts_path, "w") as f:
+            json.dump(accounts, f, indent=2)
+
+        self.created_username = u
+        self.accept()
+
+class SignIn(QDialog):
+    def __init__(self, accounts_path = ACCOUNTS_PATH):
+        super().__init__()
+        self.accounts_path = accounts_path
+        self.signed_in_username = None
+
+        self.setWindowTitle("Sign In - TrackStock")
+        self.setModal(True)
+        self.resize(520, 320)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(14)
+
+        title = QLabel("Sign in")
+        title.setObjectName("PageTitle")
+
+        hint = QLabel("Enter your username and password to continue.")
+        hint.setObjectName("Subtle")
+        hint.setWordWrap(True)
+
+        root.addWidget(title)
+        root.addWidget(hint)
+
+        card = QFrame()
+        card.setProperty("class", "Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(10)
+
+        form = QGridLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Username")
+
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setPlaceholderText("Password")
+
+        form.addWidget(QLabel("Username"), 0, 0)
+        form.addWidget(self.username, 0, 1)
+        form.addWidget(QLabel("Password"), 1, 0)
+        form.addWidget(self.password, 1, 1)
+
+        card_layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+
+        exit_btn = QPushButton("Exit")
+        exit_btn.clicked.connect(self.reject)
+
+        sign_in_btn = QPushButton("Sign in")
+        sign_in_btn.clicked.connect(self.sign_in)
+
+        btn_row.addWidget(exit_btn)
+        btn_row.addWidget(sign_in_btn)
+
+        card_layout.addLayout(btn_row)
+        root.addWidget(card)
+
+    def sign_in(self):
+        u = self.username.text().strip()
+        p = self.password.text()
+
+        accounts = load_accounts(self.accounts_path)
+        if u not in accounts:
+            QMessageBox.warning(self, "Sign in failed", "Unknown username.")
+            return
+
+        expected = accounts[u].get("password_hash")
+        if hash_password(p) != expected:
+            QMessageBox.warning(self, "Sign in failed", "Incorrect password.")
+            return
+
+        self.signed_in_username = u
+        self.signed_in_userlevel = accounts[u].get("user_level")
+        self.accept()
+
+class CreateAccount(QDialog):
+    def __init__(self, accounts_path=ACCOUNTS_PATH):
+        super().__init__()
+        self.accounts_path = accounts_path
+
+        self.setWindowTitle("Create Account - TrackStock")
+        self.setModal(True)
+        self.resize(520, 420)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(14)
+
+        title = QLabel("Create an account")
+        title.setObjectName("PageTitle")
+
+        hint = QLabel("Create an Admin or Standard account.")
+        hint.setObjectName("Subtle")
+        hint.setWordWrap(True)
+
+        root.addWidget(title)
+        root.addWidget(hint)
+
+        card = QFrame()
+        card.setProperty("class", "Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(10)
+
+        form = QGridLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Username (min 3 chars)")
+
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setPlaceholderText("Password (min 6 chars)")
+
+        self.confirm = QLineEdit()
+        self.confirm.setEchoMode(QLineEdit.Password)
+        self.confirm.setPlaceholderText("Confirm password")
+
+        form.addWidget(QLabel("Username"), 0, 0)
+        form.addWidget(self.username, 0, 1)
+        form.addWidget(QLabel("Password"), 1, 0)
+        form.addWidget(self.password, 1, 1)
+        form.addWidget(QLabel("Confirm"), 2, 0)
+        form.addWidget(self.confirm, 2, 1)
+
+        card_layout.addLayout(form)
+
+        #role radio buttons (rb)
+        role_row = QHBoxLayout()
+        role_row.setSpacing(12)
+
+        role_label = QLabel("Account type")
+        self.rb_admin = QRadioButton("Admin")
+        self.rb_standard = QRadioButton("Standard")
+        self.rb_standard.setChecked(True)
+
+        role_row.addWidget(role_label)
+        role_row.addStretch(1)
+        role_row.addWidget(self.rb_admin)
+        role_row.addWidget(self.rb_standard)
+
+        card_layout.addLayout(role_row)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+
+        create_btn = QPushButton("Create account")
+        create_btn.clicked.connect(self.create_account)
+
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(create_btn)
+
+        card_layout.addLayout(btn_row)
+        root.addWidget(card)
+
+    def create_account(self):
+        u = self.username.text().strip()
+        p = self.password.text()
+        c = self.confirm.text()
+
+        if len(u) < 3:
+            QMessageBox.warning(self, "Invalid username", "Username must be at least 3 characters.")
+            return
+        if len(p) < 6:
+            QMessageBox.warning(self, "Weak password", "Password must be at least 6 characters.")
+            return
+        if p != c:
+            QMessageBox.warning(self, "Mismatch", "Passwords do not match.")
+            return
+
+        accounts = load_accounts(self.accounts_path)
+        if u in accounts:
+            QMessageBox.warning(self, "Username exists", "That username already exists.")
+            return
+        
+        if self.rb_admin.isChecked():
+            user_level = "Admin"
+        else:
+            user_level = "Standard"
+
+        accounts[u] = {
+            "password_hash": hash_password(p),
+            "user_level": user_level
+        }
+        with open(self.accounts_path, "w") as f:
+            json.dump(accounts, f, indent=2)
+        self.accept()
+
+class Settings(QDialog):
+    def __init__(self, current_user_level, accounts_path=ACCOUNTS_PATH):
+        super().__init__()
+        self.current_user_level = current_user_level
+        self.accounts_path = accounts_path
+
+        self.setWindowTitle("Settings")
+        self.setModal(True)
+        self.resize(420, 260)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(12)
+
+        title = QLabel("Settings")
+        title.setObjectName("PageTitle")
+        root.addWidget(title)
+
+        hint = QLabel(f"Signed in as: {self.current_user_level}")
+        hint.setObjectName("Subtle")
+        root.addWidget(hint)
+
+        card = QFrame()
+        card.setProperty("class", "Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(10)
+
+        #only Admin/Super Admin can create accounts
+        if self.current_user_level == "Super Admin" or self.current_user_level == "Admin":
+            create_btn = QPushButton("Create account")
+            create_btn.clicked.connect(self.open_create_account)
+            card_layout.addWidget(create_btn)
+
+        theme_btn = QPushButton("Change theme")
+        card_layout.addWidget(theme_btn)
+
+        signout_btn = QPushButton("Sign out (Exit)")
+        signout_btn.clicked.connect(QApplication.instance().quit)
+        card_layout.addWidget(signout_btn)
+
+        root.addWidget(card)
+
+    def open_create_account(self):
+        #close settings, then open create account dialog
+        self.accept()
+        dlg = CreateAccount(accounts_path=self.accounts_path)
+        dlg.exec_()
 
 #function to create repeatable card based widgets. layouts of widgets within cards and styles defined
 def make_card(title, kpi, caption):
@@ -364,7 +720,7 @@ class SearchPage(QWidget):
 
 #initialisation and layout/styles of the main application and everything other than tabs
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, showUsername, showUserlevel):
         super().__init__()
         self.setWindowTitle("TrackStock")
         self.resize(1200, 680)
@@ -411,13 +767,18 @@ class MainWindow(QMainWindow):
         me = QLabel("Signed in")
         me.setProperty("class", "CardTitle")
 
-        hint = QLabel("Account123")
+        hint = QLabel(f"{showUsername} - {showUserlevel}")
         hint.setObjectName("Subtle")
 
         fl.addWidget(me)
         fl.addWidget(hint)
 
         side_layout.addWidget(profile_btn)
+
+        #store for settings so knows to show or not account creation
+        self.current_user_level = showUserlevel
+        
+        profile_btn.clicked.connect(self.open_settings)
 
         #main area
         main = QWidget()
@@ -445,11 +806,30 @@ class MainWindow(QMainWindow):
         f.setPointSize(10)
         QApplication.instance().setFont(f)
 
+    def open_settings(self):
+        dlg = Settings(current_user_level=self.current_user_level, accounts_path=ACCOUNTS_PATH)
+        dlg.exec_()
+
 #assembling the final result to be run
 def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(QSS)
-    window = MainWindow()
+
+    #decide which dialog to show
+    if load_accounts(ACCOUNTS_PATH):
+        dlg = SignIn(ACCOUNTS_PATH)
+        if dlg.exec_() != QDialog.Accepted:
+            sys.exit(0)
+        username = dlg.signed_in_username
+        userlevel = dlg.signed_in_userlevel
+    else:
+        dlg = InitialAccountCreation(ACCOUNTS_PATH)
+        if dlg.exec_() != QDialog.Accepted:
+            sys.exit(0)
+        username = dlg.created_username
+        userlevel = "Super Admin"
+
+    window = MainWindow(showUsername=username, showUserlevel=userlevel)
     window.show()
     sys.exit(app.exec_())
 
