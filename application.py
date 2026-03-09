@@ -1,10 +1,12 @@
 import sys, os, json, hashlib
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPixmap
+from PyQt5.QtSql import QSqlDatabase, QSqlQuery
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFrame, QLabel, QLineEdit, QPushButton,
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox, QRadioButton
+    QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox, 
+    QRadioButton, QScrollArea, QSizePolicy, QComboBox, QFormLayout, QSpinBox, QDoubleSpinBox
 )
 
 QSS = """
@@ -54,7 +56,6 @@ QPushButton#ProfileFooter {
     background: #121a24;
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 10px;
-    padding: 0px;
 }
 
 QListWidget#NavList::item {
@@ -145,6 +146,40 @@ QTableWidget::item:selected {
     background: rgba(118, 142, 255, 0.18);
 }
 
+/*##########Item Cards########## */
+.ItemCard {
+    background: #121a24;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+}
+
+.ItemCard:hover {
+    background: rgba(118, 142, 255, 0.25);
+    border: 1px solid rgba(118, 142, 255, 0.40);
+}
+
+.ItemCard:pressed {
+    background: rgba(118, 142, 255, 0.14);
+}
+
+.ItemName {
+    font-size: 16px;
+    font-weight: 800;
+    color: rgba(238,243,255,0.95);
+}
+
+.ItemQtyPrice {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(215,221,232,0.75);
+}
+
+.ItemImageFrame {
+    background: rgba(11,16,22,0.6);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+}
+
 /*##########Inputs / Buttons on pages##########*/
 QLineEdit {
     background: #0b1016;
@@ -169,10 +204,28 @@ QPushButton:hover {
 QPushButton:pressed {
     background: rgba(118, 142, 255, 0.14);
 }
+
+QComboBox, QSpinBox, QDoubleSpinBox {
+    background: #0b1016;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 6px 10px;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
 """
 
-#current working directory dynamic, change file name here
+
+#Variables and functions concerning directories & linking files
 ACCOUNTS_PATH = "accounts.json"
+
+def app_dir():
+    return os.path.dirname(os.path.realpath(__file__))
+
+def images_dir():
+    return os.path.join(app_dir(), "Images")
 
 def load_accounts(path = ACCOUNTS_PATH):
     #return dict of accounts, false if file missing
@@ -660,10 +713,101 @@ class DashboardPage(QWidget):
         bottom = make_chart("Top 10 Inventory (Quantity)", height=300)
         root.addWidget(bottom)
 
-#initialisation and layout/styles of items tab
+class ItemCards(QPushButton):
+    def __init__(self, name, quantity, price, image_filename):
+        super().__init__()
+        self.setCursor(Qt.PointingHandCursor)
+        self.setProperty("class", "ItemCard")
+
+        self.setFixedSize(240, 220)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(10)
+
+        #image holder
+        self.img_label = QLabel()
+        self.img_label.setProperty("class", "ItemImageFrame")
+        self.img_label.setFixedHeight(120)
+        self.img_label.setAlignment(Qt.AlignCenter)
+
+        #load image from Images/<filename>, show placeholder if error.
+        img_path = os.path.join(images_dir(), image_filename or "placeholder.png")
+        if not os.path.exists(img_path):
+            img_path = os.path.join(images_dir(), "placeholder.png")
+
+        imgPixMap = QPixmap(img_path)
+        imgPixMap = imgPixMap.scaled(212, 110, Qt.KeepAspectRatio)
+        self.img_label.setPixmap(imgPixMap)
+
+        #text in buttons
+        self.name_label = QLabel(name)
+        self.name_label.setProperty("class", "ItemName")
+        self.name_label.setWordWrap(True)
+
+        self.qty_label = QLabel(f"Quantity: {quantity}")
+        self.qty_label.setProperty("class", "ItemQtyPrice")
+
+        self.price_label = QLabel(f"Price: £{price:.2f}")
+        self.price_label.setProperty("class", "ItemQtyPrice")
+
+        outer.addWidget(self.img_label)
+        outer.addWidget(self.name_label)
+        outer.addWidget(self.qty_label)
+        outer.addWidget(self.price_label)
+        outer.addStretch(1)
+
+#widget that maintains uniform spaced grid. Recalculate columns on resize
+class CardGrid(QWidget):
+    def __init__(self, card_w, spacing):
+        super().__init__()
+        self.card_w = card_w
+        self.spacing = spacing
+        self.cards = []
+
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(10, 10, 10, 10)
+        self.grid.setHorizontalSpacing(self.spacing)
+        self.grid.setVerticalSpacing(self.spacing)
+        self.grid.setAlignment(Qt.AlignTop|Qt.AlignLeft)
+
+    def setCards(self, cards):
+        #clear existing
+        while self.grid.count():
+            item = self.grid.takeAt(0)
+            fullDelete = item.widget()
+            if fullDelete:
+                fullDelete.deleteLater()
+
+        self.cards = list(cards)
+        self.relayout()
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.relayout()
+
+    def relayout(self):
+        #return nothing before errors thrown if no cards
+        if not self.cards:
+            return
+
+        viewport_w = self.width()
+        #calculate how many columns fit
+        #max ensures always at least one column
+        cols = max(1, (viewport_w + self.spacing) // (self.card_w + self.spacing))
+
+        #re-add cards left to right, then start new row
+        for i, cardContent in enumerate(self.cards):
+            r = i // cols
+            c = i % cols
+            self.grid.addWidget(cardContent, r, c)
+
+
 class ItemsPage(QWidget):
     def __init__(self):
         super().__init__()
+
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -672,29 +816,69 @@ class ItemsPage(QWidget):
         title.setObjectName("PageTitle")
         root.addWidget(title)
 
+        #container for header row (hint+buttons) and scrollable card grid
         panel = QFrame()
         panel.setProperty("class", "Card")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(16, 16, 16, 16)
+        panel_layout.setSpacing(12)
 
-        hint = QLabel("A simple list.")
+        #header row (hint+buttons)
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(10)
+
+        hint = QLabel("Items within database")
         hint.setObjectName("Subtle")
+        header_row.addWidget(hint, 1)
+        add_btn = QPushButton("Add Item")
+        add_btn.setCursor(Qt.PointingHandCursor)
+        header_row.addWidget(add_btn)
+        panel_layout.addLayout(header_row)
 
-        layout.addWidget(hint)
+        #scrollable grid inside panel
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
 
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        actions.addWidget(QPushButton("Add Item"))
-        actions.addWidget(QPushButton("Remove"))
-        layout.addLayout(actions)
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+
+        self.card_grid = CardGrid(card_w=240, spacing=14)
+        container_layout.addWidget(self.card_grid, 1)
+
+        scroll.setWidget(container)
+        panel_layout.addWidget(scroll, 1)
 
         root.addWidget(panel, 1)
 
-#initialisation and layout/styles of search tab
+        #load cards from database
+        self.load_cards_from_db()
+
+    #convert SQL entries to cards
+    def load_cards_from_db(self):
+        query = QSqlQuery()
+        query.exec_("SELECT item_id, name, quantity, price, image_path FROM items ORDER BY item_id")
+
+        cards = []
+        while query.next():
+            name = str(query.value(1))
+            quantity = int(query.value(2))
+            price = float(query.value(3) or 0)
+            image_fn = str(query.value(4) or "placeholder.png") #show placeholder in case image not attached
+
+            card = ItemCards(name=name, quantity=quantity, price=price, image_filename=image_fn)
+
+            cards.append(card)
+
+        self.card_grid.setCards(cards)
+
 class SearchPage(QWidget):
     def __init__(self):
         super().__init__()
+
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -702,20 +886,205 @@ class SearchPage(QWidget):
         title = QLabel("Search")
         title.setObjectName("PageTitle")
 
-        desc = QLabel("A search layout with results panel.")
+        desc = QLabel("Search items and filter results.")
         desc.setObjectName("Subtle")
 
         root.addWidget(title)
         root.addWidget(desc)
 
-        row = QHBoxLayout()
+        #search bar
+        top_row = QHBoxLayout()
         self.query = QLineEdit()
-        self.query.setPlaceholderText("Search items, pages, or users…")
-        btn = QPushButton("Search")
+        self.query.setPlaceholderText("Search item name...")
+        self.search_btn = QPushButton("Search")
+        self.search_btn.setCursor(Qt.PointingHandCursor)
 
-        row.addWidget(self.query)
-        row.addWidget(btn)
-        root.addLayout(row)
+        top_row.addWidget(self.query, 1)
+        top_row.addWidget(self.search_btn)
+        root.addLayout(top_row)
+
+        #main content row
+        content_row = QHBoxLayout()
+        content_row.setSpacing(14)
+
+        #left filter panel
+        filter_card = QFrame()
+        filter_card.setProperty("class", "Card")
+        filter_card.setFixedWidth(240)
+
+        filter_layout = QVBoxLayout(filter_card)
+        filter_layout.setContentsMargins(14, 14, 14, 14)
+        filter_layout.setSpacing(12)
+
+        filter_title = QLabel("Filters")
+        filter_title.setProperty("class", "CardTitle")
+        filter_layout.addWidget(filter_title)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        self.qty_min = QSpinBox()
+        self.qty_min.setMinimum(0)
+        self.qty_min.setMaximum(999)
+        self.qty_min.setValue(0)
+
+        self.qty_max = QSpinBox()
+        self.qty_max.setMinimum(0)
+        self.qty_max.setMaximum(999)
+        self.qty_max.setValue(999)
+
+        self.price_min = QDoubleSpinBox()
+        self.price_min.setMinimum(0.00)
+        self.price_min.setMaximum(999.99)
+        self.price_min.setDecimals(2)
+        self.price_min.setSingleStep(0.50)
+        self.price_min.setValue(0.00)
+        self.price_min.setPrefix("£")
+
+        self.price_max = QDoubleSpinBox()
+        self.price_max.setMinimum(0.00)
+        self.price_max.setMaximum(999.99)
+        self.price_max.setDecimals(2)
+        self.price_max.setSingleStep(0.50)
+        self.price_max.setValue(999.99)
+        self.price_max.setPrefix("£")
+
+        self.sort_by = QComboBox()
+        self.sort_by.addItems([
+            "Name A-Z",
+            "Name Z-A",
+            "Quantity Low-High",
+            "Quantity High-Low",
+            "Price Low-High",
+            "Price High-Low"
+        ])
+
+        form.addRow("Qty min", self.qty_min)
+        form.addRow("Qty max", self.qty_max)
+        form.addRow("Price min", self.price_min)
+        form.addRow("Price max", self.price_max)
+        form.addRow("Sort by", self.sort_by)
+
+        filter_layout.addLayout(form)
+
+        self.clear_filters_btn = QPushButton("Clear filters")
+        filter_layout.addWidget(self.clear_filters_btn)
+        filter_layout.addStretch(1)
+
+        #right results panel
+        results_card = QFrame()
+        results_card.setProperty("class", "Card")
+        results_layout = QVBoxLayout(results_card)
+        results_layout.setContentsMargins(16, 16, 16, 16)
+        results_layout.setSpacing(12)
+
+        self.results_hint = QLabel("Matching items will appear below.")
+        self.results_hint.setObjectName("Subtle")
+        results_layout.addWidget(self.results_hint)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+
+        self.card_grid = CardGrid(card_w=240, spacing=14)
+        container_layout.addWidget(self.card_grid, 1)
+
+        scroll.setWidget(container)
+        results_layout.addWidget(scroll, 1)
+
+        content_row.addWidget(filter_card)
+        content_row.addWidget(results_card, 1)
+
+        root.addLayout(content_row, 1)
+
+        #signals when filter changed
+        self.query.textChanged.connect(self.apply_filters)
+        self.search_btn.clicked.connect(self.apply_filters)
+
+        self.qty_min.valueChanged.connect(self.apply_filters)
+        self.qty_max.valueChanged.connect(self.apply_filters)
+        self.price_min.valueChanged.connect(self.apply_filters)
+        self.price_max.valueChanged.connect(self.apply_filters)
+        self.sort_by.currentIndexChanged.connect(self.apply_filters)
+        self.clear_filters_btn.clicked.connect(self.clear_filters)
+
+        #initial loading of filters
+        self.apply_filters()
+
+    def clear_filters(self):
+        self.query.clear()
+        self.qty_min.setValue(0)
+        self.qty_max.setValue(999)
+        self.price_min.setValue(0.00)
+        self.price_max.setValue(999.99)
+        self.sort_by.setCurrentIndex(0)
+        self.apply_filters()
+
+    def apply_filters(self):
+        search_text = self.query.text().strip().lower()
+        qty_min = self.qty_min.value()
+        qty_max = self.qty_max.value()
+        price_min = self.price_min.value()
+        price_max = self.price_max.value()
+        sort_text = self.sort_by.currentText()
+
+        if qty_min > qty_max:
+            qty_max = qty_min
+            self.qty_max.setValue(qty_max)
+
+        if price_min > price_max:
+            price_max = price_min
+            self.price_max.setValue(price_max)
+
+        order_command = "name COLLATE NOCASE ASC"
+        if sort_text == "Name Z-A":
+            order_command = "name COLLATE NOCASE DESC"
+        elif sort_text == "Quantity Low-High":
+            order_command = "quantity ASC"
+        elif sort_text == "Quantity High-Low":
+            order_command = "quantity DESC"
+        elif sort_text == "Price Low-High":
+            order_command = "price ASC"
+        elif sort_text == "Price High-Low":
+            order_command = "price DESC"
+
+        sql = f"""
+            SELECT name, quantity, price, image_path
+            FROM items
+            WHERE LOWER(name) LIKE ?
+              AND quantity BETWEEN ? AND ?
+              AND price BETWEEN ? AND ?
+            ORDER BY {order_command}
+        """
+
+        query = QSqlQuery()
+        query.prepare(sql)
+        query.addBindValue(f"%{search_text}%") #% wildcard to match any record with part of search_text
+        query.addBindValue(qty_min)
+        query.addBindValue(qty_max)
+        query.addBindValue(price_min)
+        query.addBindValue(price_max)
+        query.exec_()
+
+        cards = []
+
+        while query.next():
+            name = str(query.value(0))
+            quantity = int(query.value(1))
+            price = float(query.value(2))
+            image_fn = str(query.value(3) or "placeholder.png")
+
+            card = ItemCards(name=name, quantity=quantity, price=price, image_filename=image_fn)
+
+            cards.append(card)
+
+        self.card_grid.setCards(cards)
+        self.results_hint.setText(f"{len(cards)} matching item(s)")
 
 
 #initialisation and layout/styles of the main application and everything other than tabs
@@ -814,6 +1183,12 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(QSS)
+
+    database = QSqlDatabase.addDatabase("QSQLITE")
+    database.setDatabaseName("trackstock.db")
+    if not database.open():
+        QMessageBox.critical(None, "Database Error", "Could not open trackstock.db")
+        sys.exit(0)
 
     #decide which dialog to show
     if load_accounts(ACCOUNTS_PATH):
