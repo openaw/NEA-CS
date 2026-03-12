@@ -1,12 +1,14 @@
-import sys, os, json, hashlib
-from PyQt5.QtCore import Qt
+import sys, os, json, hashlib, shutil
+from datetime import datetime
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFrame, QLabel, QLineEdit, QPushButton,
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox, 
-    QRadioButton, QScrollArea, QSizePolicy, QComboBox, QFormLayout, QSpinBox, QDoubleSpinBox
+    QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox,
+    QRadioButton, QScrollArea, QSizePolicy, QComboBox, QFormLayout, QSpinBox,
+    QDoubleSpinBox, QTextEdit, QFileDialog
 )
 
 QSS = """
@@ -180,6 +182,29 @@ QTableWidget::item:selected {
     border-radius: 12px;
 }
 
+/*##########Item Modification##########*/
+QTextEdit {
+    background: #0b1016;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 9px 12px;
+}
+
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QTextEdit:disabled {
+    background: rgba(255,255,255,0.05);
+    color: rgba(215,221,232,0.50);
+}
+
+#ImagePreviewFrame {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+}
+
+#ImagePreviewLabel {
+    background: transparent;
+}
+
 /*##########Inputs / Buttons on pages##########*/
 QLineEdit {
     background: #0b1016;
@@ -227,6 +252,9 @@ def app_dir():
 def images_dir():
     return os.path.join(app_dir(), "Images")
 
+def placeholder_image_path():
+    return os.path.join(images_dir(), "placeholder.png")
+
 def load_accounts(path = ACCOUNTS_PATH):
     #return dict of accounts, false if file missing
     if not os.path.exists(path):
@@ -235,7 +263,21 @@ def load_accounts(path = ACCOUNTS_PATH):
         with open(path, "r") as file:
             data = json.load(file)
         return data
+    
 
+
+def isAdmin(user_level):
+    return user_level in ("Admin", "Super Admin")
+
+def canSeeItem(user_level, permission_mode):
+    if isAdmin(user_level):
+        return True
+    return permission_mode.strip().lower() != "hidden"
+
+def canEditItem(user_level, permission_mode):
+    if isAdmin(user_level):
+        return True
+    return permission_mode.strip().lower() != "read only"
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -672,6 +714,391 @@ def make_chart(title, height=220):
     layout.addWidget(chart)
     return box
 
+class ItemEditorDialog(QDialog):
+    def __init__(self, current_user_level, current_username, item_id=None):
+        super().__init__()
+        self.current_user_level = current_user_level
+        self.current_username = current_username
+        self.item_id = item_id
+        self.image_filename = None
+        self.original_permission_mode = None
+        self.initial_state = None
+
+        self.setWindowTitle("Modify Item")
+        self.setModal(True)
+        self.resize(900, 620)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(14)
+
+        page = QFrame()
+        page.setProperty("class", "Card")
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(18, 18, 18, 18)
+        page_layout.setSpacing(12)
+
+        content = QHBoxLayout()
+        content.setSpacing(20)
+
+        #left side options
+        left_col = QVBoxLayout()
+        left_col.setSpacing(10)
+
+        title_lbl = QLabel("Item Name")
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Enter item name")
+
+        self.id_label = QLabel("ID: auto-generated")
+        self.id_label.setObjectName("Subtle")
+
+        qty_unit_row = QHBoxLayout()
+        qty_unit_row.setSpacing(14)
+
+        qty_box = QVBoxLayout()
+        qty_box.addWidget(QLabel("Quantity"))
+        self.qty_spin = QSpinBox()
+        self.qty_spin.setRange(0, 999)
+        qty_box.addWidget(self.qty_spin)
+
+        unit_box = QVBoxLayout()
+        unit_box.addWidget(QLabel("Unit"))
+        self.unit_combo = QComboBox()
+        self.unit_combo.addItems(["unit", "kg", "box"])
+        unit_box.addWidget(self.unit_combo)
+
+        qty_unit_row.addLayout(qty_box, 1)
+        qty_unit_row.addLayout(unit_box, 1)
+
+        price_box = QVBoxLayout()
+        price_box.addWidget(QLabel("Price"))
+        self.price_spin = QDoubleSpinBox()
+        self.price_spin.setRange(0.00, 999.99)
+        self.price_spin.setDecimals(2)
+        self.price_spin.setSingleStep(0.50)
+        price_box.addWidget(self.price_spin)
+
+        low_perm_row = QHBoxLayout()
+        low_perm_row.setSpacing(14)
+
+        low_box = QVBoxLayout()
+        low_box.addWidget(QLabel("Low Stock"))
+        low_inner = QHBoxLayout()
+        low_inner.setSpacing(8)
+
+        self.low_threshold_spin = QSpinBox()
+        self.low_threshold_spin.setRange(0, 999)
+        self.low_threshold_spin.setFixedWidth(90)
+
+        self.low_stock_combo = QComboBox()
+        self.low_stock_combo.addItems(["Off", "On"])
+        self.low_stock_combo.setFixedWidth(90)
+
+        low_inner.addWidget(self.low_threshold_spin)
+        low_inner.addWidget(self.low_stock_combo)
+        low_box.addLayout(low_inner)
+
+        perm_box = QVBoxLayout()
+        perm_box.addWidget(QLabel("Access level"))
+        self.permission_combo = QComboBox()
+        self.permission_combo.addItems(["Editable", "Read only", "Hidden"])
+        perm_box.addWidget(self.permission_combo)
+
+        low_perm_row.addLayout(low_box)
+        low_perm_row.addLayout(perm_box, 1)
+
+        qr_title = QLabel("Generate QR/Barcode")
+        qr_row = QHBoxLayout()
+        qr_row.setSpacing(10)
+        self.qr_btn = QPushButton("QR")
+        self.barcode_btn = QPushButton("Barcode")
+        qr_row.addWidget(self.qr_btn)
+        qr_row.addWidget(self.barcode_btn)
+
+        left_col.addWidget(title_lbl)
+        left_col.addWidget(self.name_edit)
+        left_col.addWidget(self.id_label)
+        left_col.addLayout(qty_unit_row)
+        left_col.addLayout(price_box)
+        left_col.addLayout(low_perm_row)
+        left_col.addWidget(qr_title)
+        left_col.addLayout(qr_row)
+        left_col.addStretch(1)
+
+        #right side options
+        right_col = QVBoxLayout()
+        right_col.setSpacing(14)
+
+        self.image_frame = QFrame()
+        self.image_frame.setObjectName("ImagePreviewFrame")
+        self.image_frame.setMinimumSize(420, 260)
+        self.image_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        image_stack = QVBoxLayout(self.image_frame)
+        image_stack.setContentsMargins(10, 10, 10, 10)
+        image_stack.setSpacing(0)
+
+        self.image_label = QLabel()
+        self.image_label.setObjectName("ImagePreviewLabel")
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setScaledContents(False)
+        self.image_label.setCursor(Qt.PointingHandCursor)
+        self.image_label.mousePressEvent = self.image_label_clicked
+
+        self.add_image_btn = QPushButton("Add Image +")
+        self.add_image_btn.setFixedSize(160, 42)
+        self.add_image_btn.clicked.connect(self.select_image)
+
+        image_stack.addStretch(1)
+        image_stack.addWidget(self.image_label, 0, Qt.AlignCenter)
+        image_stack.addWidget(self.add_image_btn, 0, Qt.AlignCenter)
+        image_stack.addStretch(1)
+
+        notes_title = QLabel("Notes")
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setPlaceholderText("Type here...")
+        self.notes_edit.setFixedHeight(140)
+
+        self.modified_label = QLabel("last modified: -")
+        self.modified_label.setObjectName("Subtle")
+
+        right_col.addWidget(self.image_frame)
+        right_col.addWidget(notes_title)
+        right_col.addWidget(self.notes_edit)
+        right_col.addWidget(self.modified_label)
+        right_col.addStretch(1)
+
+        content.addLayout(left_col, 4)
+        content.addLayout(right_col, 6)
+
+        btn_row = QHBoxLayout()
+
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.clicked.connect(self.delete_item)
+        self.delete_btn.setVisible(self.item_id is not None)
+
+        btn_row.addWidget(self.delete_btn)
+        btn_row.addStretch(1)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self.save_item)
+
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(save_btn)
+
+        page_layout.addLayout(content)
+        page_layout.addLayout(btn_row)
+        root.addWidget(page)
+
+        self.low_stock_combo.currentTextChanged.connect(self.update_low_stock_state)
+        self.update_low_stock_state()
+
+        if self.item_id is not None:
+            self.load_item()
+        else:
+            self.permission_combo.setCurrentText("Editable")
+
+        self.initial_state = self.get_form_state()
+
+
+    def get_form_state(self):
+        return {
+            "name": self.name_edit.text().strip(),
+            "quantity": self.qty_spin.value(),
+            "unit": self.unit_combo.currentText(),
+            "price": round(self.price_spin.value(), 2),
+            "notes": self.notes_edit.toPlainText().strip(),
+            "low_stock": self.low_stock_combo.currentText(),
+            "threshold": self.low_threshold_spin.value(),
+            "permission_mode": self.permission_combo.currentText(),
+            "image_filename": self.image_filename or ""
+        }
+
+    def has_unsaved_changes(self):
+        return self.get_form_state() != self.initial_state
+
+    def update_low_stock_state(self):
+        enabled = self.low_stock_combo.currentText() == "On"
+        self.low_threshold_spin.setEnabled(enabled)
+
+    def image_label_clicked(self, event):
+        self.select_image()
+
+    def select_image(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select PNG image", "", "PNG Files (*.png)")
+        if not file_path:
+            return
+
+        filename = os.path.basename(file_path)
+        dest_path = os.path.join(images_dir(), filename)
+
+        if os.path.exists(dest_path):
+            QMessageBox.warning(self, "Duplicate Image", "An image with this name already exists.")
+            return
+
+        shutil.copyfile(file_path, dest_path)
+
+        self.image_filename = filename
+        self.show_image_preview(dest_path)
+
+    def show_image_preview(self, full_path):
+        pix = QPixmap(full_path)
+        scaled = pix.scaled(QSize(390, 230), Qt.KeepAspectRatio)
+        self.image_label.setPixmap(scaled)
+        self.add_image_btn.hide()
+
+    def load_item(self):
+        query = QSqlQuery()
+        query.prepare("""
+            SELECT item_id, name, quantity, unit, price, notes,
+                   low_stock, threshold, permission_mode, image_path, updated
+            FROM items
+            WHERE item_id = ?
+        """)
+        query.addBindValue(self.item_id)
+        query.exec_()
+        query.next()
+
+        item_id = query.value(0)
+        name = str(query.value(1) or "")
+        quantity = int(query.value(2) or 0)
+        unit = str(query.value(3) or "unit")
+        price = float(query.value(4) or 0)
+        notes = str(query.value(5) or "")
+        low_stock = bool(query.value(6))
+        threshold = int(query.value(7) or 0)
+        permission_mode = str(query.value(8) or "Editable")
+        image_path = str(query.value(9) or "")
+        updated = str(query.value(10) or "")
+
+        self.id_label.setText(f"ID: {item_id}")
+        self.name_edit.setText(name)
+        self.qty_spin.setValue(quantity)
+        self.unit_combo.setCurrentText(unit)
+        self.price_spin.setValue(price)
+        self.notes_edit.setPlainText(notes)
+        self.low_stock_combo.setCurrentText("On" if low_stock else "Off")
+        self.low_threshold_spin.setValue(threshold)
+        self.permission_combo.setCurrentText(permission_mode)
+        self.original_permission_mode = self.permission_combo.currentText()
+        self.modified_label.setText(f"last modified: {updated}" if updated else "last modified: -")
+
+        self.update_low_stock_state()
+
+        self.image_filename = image_path if image_path else None
+        if image_path:
+            full_path = os.path.join(images_dir(), image_path)
+            self.show_image_preview(full_path)
+
+
+    def confirm_discard_changes(self):
+        if not self.has_unsaved_changes():
+            return True
+
+        reply = QMessageBox.question(
+            self,
+            "Unsaved changes",
+            "You have unsaved changes. Discard them and close?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        return reply == QMessageBox.Yes
+
+    def reject(self):
+        if self.confirm_discard_changes():
+            super().reject()
+
+
+    def delete_item(self):
+        permission_mode_for_check = self.original_permission_mode or self.permission_combo.currentText()
+        if not canEditItem(self.current_user_level, permission_mode_for_check):
+            QMessageBox.warning(self, "Read only item", "This item is read only. You cannot delete it.")
+            return
+
+        reply = QMessageBox.warning(
+            self,
+            "Delete item",
+            "Are you sure you want to delete this item?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        query = QSqlQuery()
+        query.prepare("DELETE FROM items WHERE item_id = ?")
+        query.addBindValue(self.item_id)
+
+        query.exec_()
+
+        self.accept()
+
+    def save_item(self):
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Missing data", "Please enter an item name.")
+            return
+
+        if self.item_id is not None:
+            permission_mode_for_check = self.original_permission_mode or self.permission_combo.currentText()
+            if not canEditItem(self.current_user_level, permission_mode_for_check):
+                QMessageBox.warning(self, "Read only item", "This item is read only. You cannot save changes.")
+                return
+
+        quantity = self.qty_spin.value()
+        unit = self.unit_combo.currentText()
+        price = self.price_spin.value()
+        notes = self.notes_edit.toPlainText().strip()
+        low_stock_on = self.low_stock_combo.currentText() == "On"
+        threshold = self.low_threshold_spin.value() if low_stock_on else 0
+        permission_mode = self.permission_combo.currentText()
+        updated = datetime.now().strftime(f"{self.current_username}, %d/%m/%y %H:%M")
+
+        query = QSqlQuery()
+
+        if self.item_id is None:
+            query.prepare("""
+                INSERT INTO items (
+                    name, quantity, unit, price, notes,
+                    low_stock, threshold, permission_mode, image_path, updated
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """)
+            query.addBindValue(name)
+            query.addBindValue(quantity)
+            query.addBindValue(unit)
+            query.addBindValue(price)
+            query.addBindValue(notes)
+            query.addBindValue(1 if low_stock_on else 0)
+            query.addBindValue(threshold)
+            query.addBindValue(permission_mode)
+            query.addBindValue(self.image_filename)
+            query.addBindValue(updated)
+            query.exec_()
+        else:
+            query.prepare("""
+                UPDATE items
+                SET name = ?, quantity = ?, unit = ?, price = ?, notes = ?,
+                    low_stock = ?, threshold = ?, permission_mode = ?, image_path = ?, updated = ?
+                WHERE item_id = ?
+            """)
+            query.addBindValue(name)
+            query.addBindValue(quantity)
+            query.addBindValue(unit)
+            query.addBindValue(price)
+            query.addBindValue(notes)
+            query.addBindValue(1 if low_stock_on else 0)
+            query.addBindValue(threshold)
+            query.addBindValue(permission_mode)
+            query.addBindValue(self.image_filename)
+            query.addBindValue(updated)
+            query.addBindValue(self.item_id)
+            query.exec_()
+
+        self.accept()
+
 #initialisation and layout/styles of dashboard tab
 class DashboardPage(QWidget):
     def __init__(self):
@@ -714,8 +1141,9 @@ class DashboardPage(QWidget):
         root.addWidget(bottom)
 
 class ItemCards(QPushButton):
-    def __init__(self, name, quantity, price, image_filename):
+    def __init__(self, item_id, name, quantity, price, image_filename):
         super().__init__()
+        self.item_id = item_id
         self.setCursor(Qt.PointingHandCursor)
         self.setProperty("class", "ItemCard")
 
@@ -726,22 +1154,19 @@ class ItemCards(QPushButton):
         outer.setContentsMargins(14, 14, 14, 14)
         outer.setSpacing(10)
 
-        #image holder
         self.img_label = QLabel()
         self.img_label.setProperty("class", "ItemImageFrame")
         self.img_label.setFixedHeight(120)
         self.img_label.setAlignment(Qt.AlignCenter)
 
-        #load image from Images/<filename>, show placeholder if error.
         img_path = os.path.join(images_dir(), image_filename or "placeholder.png")
         if not os.path.exists(img_path):
-            img_path = os.path.join(images_dir(), "placeholder.png")
+            img_path = placeholder_image_path()
 
         imgPixMap = QPixmap(img_path)
         imgPixMap = imgPixMap.scaled(212, 110, Qt.KeepAspectRatio)
         self.img_label.setPixmap(imgPixMap)
 
-        #text in buttons
         self.name_label = QLabel(name)
         self.name_label.setProperty("class", "ItemName")
         self.name_label.setWordWrap(True)
@@ -805,8 +1230,10 @@ class CardGrid(QWidget):
 
 
 class ItemsPage(QWidget):
-    def __init__(self):
+    def __init__(self, current_user_level, current_username):
         super().__init__()
+        self.current_user_level = current_user_level
+        self.current_username = current_username
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -816,14 +1243,12 @@ class ItemsPage(QWidget):
         title.setObjectName("PageTitle")
         root.addWidget(title)
 
-        #container for header row (hint+buttons) and scrollable card grid
         panel = QFrame()
         panel.setProperty("class", "Card")
         panel_layout = QVBoxLayout(panel)
         panel_layout.setContentsMargins(16, 16, 16, 16)
         panel_layout.setSpacing(12)
 
-        #header row (hint+buttons)
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
         header_row.setSpacing(10)
@@ -831,12 +1256,14 @@ class ItemsPage(QWidget):
         hint = QLabel("Items within database")
         hint.setObjectName("Subtle")
         header_row.addWidget(hint, 1)
+
         add_btn = QPushButton("Add Item")
         add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.clicked.connect(self.open_add_item_dialog)
         header_row.addWidget(add_btn)
+
         panel_layout.addLayout(header_row)
 
-        #scrollable grid inside panel
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -851,33 +1278,57 @@ class ItemsPage(QWidget):
 
         scroll.setWidget(container)
         panel_layout.addWidget(scroll, 1)
-
         root.addWidget(panel, 1)
 
-        #load cards from database
         self.load_cards_from_db()
 
-    #convert SQL entries to cards
+    def open_add_item_dialog(self):
+        dlg = ItemEditorDialog(current_user_level=self.current_user_level, current_username=self.current_username)
+        if dlg.exec_() == QDialog.Accepted:
+            self.load_cards_from_db()
+
+    def open_edit_item_dialog(self, item_id):
+        dlg = ItemEditorDialog(current_user_level=self.current_user_level, current_username=self.current_username, item_id=item_id)
+        if dlg.exec_() == QDialog.Accepted:
+            self.load_cards_from_db()
+
     def load_cards_from_db(self):
         query = QSqlQuery()
-        query.exec_("SELECT item_id, name, quantity, price, image_path FROM items ORDER BY item_id")
+        query.exec_("""
+            SELECT item_id, name, quantity, price, image_path, permission_mode
+            FROM items
+            ORDER BY item_id
+        """)
 
         cards = []
         while query.next():
-            name = str(query.value(1))
-            quantity = int(query.value(2))
+            item_id = int(query.value(0))
+            name = str(query.value(1) or "")
+            quantity = int(query.value(2) or 0)
             price = float(query.value(3) or 0)
-            image_fn = str(query.value(4) or "placeholder.png") #show placeholder in case image not attached
+            image_fn = str(query.value(4) or "placeholder.png")
+            permission_mode = str(query.value(5) or "Editable")
 
-            card = ItemCards(name=name, quantity=quantity, price=price, image_filename=image_fn)
+            if not canSeeItem(self.current_user_level, permission_mode):
+                continue
 
+            card = ItemCards(
+                item_id=item_id,
+                name=name,
+                quantity=quantity,
+                price=price,
+                image_filename=image_fn
+            )
+            card.clicked.connect(lambda checked=False, iid=item_id: self.open_edit_item_dialog(iid))
             cards.append(card)
 
         self.card_grid.setCards(cards)
 
 class SearchPage(QWidget):
-    def __init__(self):
+    def __init__(self, current_user_level, current_username):
         super().__init__()
+        self.current_user_level = current_user_level
+        self.current_username = current_username
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -892,7 +1343,6 @@ class SearchPage(QWidget):
         root.addWidget(title)
         root.addWidget(desc)
 
-        #search bar
         top_row = QHBoxLayout()
         self.query = QLineEdit()
         self.query.setPlaceholderText("Search item name...")
@@ -903,11 +1353,9 @@ class SearchPage(QWidget):
         top_row.addWidget(self.search_btn)
         root.addLayout(top_row)
 
-        #main content row
         content_row = QHBoxLayout()
         content_row.setSpacing(14)
 
-        #left filter panel
         filter_card = QFrame()
         filter_card.setProperty("class", "Card")
         filter_card.setFixedWidth(240)
@@ -971,7 +1419,6 @@ class SearchPage(QWidget):
         filter_layout.addWidget(self.clear_filters_btn)
         filter_layout.addStretch(1)
 
-        #right results panel
         results_card = QFrame()
         results_card.setProperty("class", "Card")
         results_layout = QVBoxLayout(results_card)
@@ -999,10 +1446,8 @@ class SearchPage(QWidget):
 
         content_row.addWidget(filter_card)
         content_row.addWidget(results_card, 1)
-
         root.addLayout(content_row, 1)
 
-        #signals when filter changed
         self.query.textChanged.connect(self.apply_filters)
         self.search_btn.clicked.connect(self.apply_filters)
 
@@ -1013,8 +1458,12 @@ class SearchPage(QWidget):
         self.sort_by.currentIndexChanged.connect(self.apply_filters)
         self.clear_filters_btn.clicked.connect(self.clear_filters)
 
-        #initial loading of filters
         self.apply_filters()
+
+    def open_edit_item_dialog(self, item_id):
+        dlg = ItemEditorDialog(current_user_level=self.current_user_level, current_username=self.current_username, item_id=item_id)
+        if dlg.exec_() == QDialog.Accepted:
+            self.apply_filters()
 
     def clear_filters(self):
         self.query.clear()
@@ -1054,7 +1503,7 @@ class SearchPage(QWidget):
             order_command = "price DESC"
 
         sql = f"""
-            SELECT name, quantity, price, image_path
+            SELECT item_id, name, quantity, price, image_path, permission_mode
             FROM items
             WHERE LOWER(name) LIKE ?
               AND quantity BETWEEN ? AND ?
@@ -1064,7 +1513,7 @@ class SearchPage(QWidget):
 
         query = QSqlQuery()
         query.prepare(sql)
-        query.addBindValue(f"%{search_text}%") #% wildcard to match any record with part of search_text
+        query.addBindValue(f"%{search_text}%")
         query.addBindValue(qty_min)
         query.addBindValue(qty_max)
         query.addBindValue(price_min)
@@ -1074,13 +1523,24 @@ class SearchPage(QWidget):
         cards = []
 
         while query.next():
-            name = str(query.value(0))
-            quantity = int(query.value(1))
-            price = float(query.value(2))
-            image_fn = str(query.value(3) or "placeholder.png")
+            item_id = int(query.value(0))
+            name = str(query.value(1) or "")
+            quantity = int(query.value(2) or 0)
+            price = float(query.value(3) or 0)
+            image_fn = str(query.value(4) or "placeholder.png")
+            permission_mode = str(query.value(5) or "Editable")
 
-            card = ItemCards(name=name, quantity=quantity, price=price, image_filename=image_fn)
+            if not canSeeItem(self.current_user_level, permission_mode):
+                continue
 
+            card = ItemCards(
+                item_id=item_id,
+                name=name,
+                quantity=quantity,
+                price=price,
+                image_filename=image_fn
+            )
+            card.clicked.connect(lambda checked=False, iid=item_id: self.open_edit_item_dialog(iid))
             cards.append(card)
 
         self.card_grid.setCards(cards)
@@ -1146,6 +1606,8 @@ class MainWindow(QMainWindow):
 
         #store for settings so knows to show or not account creation
         self.current_user_level = showUserlevel
+        #store username for audit trail
+        self.current_username = showUsername
         
         profile_btn.clicked.connect(self.open_settings)
 
@@ -1155,11 +1617,14 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        #use stacked widgets to create different tabs
         self.pages = QStackedWidget()
-        self.pages.addWidget(DashboardPage())
-        self.pages.addWidget(ItemsPage())
-        self.pages.addWidget(SearchPage())
+        self.dashboard_page = DashboardPage()
+        self.items_page = ItemsPage(current_user_level=showUserlevel, current_username=showUsername)
+        self.search_page = SearchPage(current_user_level=showUserlevel, current_username=showUsername)
+
+        self.pages.addWidget(self.dashboard_page)
+        self.pages.addWidget(self.items_page)
+        self.pages.addWidget(self.search_page)
 
         main_layout.addWidget(self.pages, 1)
 
