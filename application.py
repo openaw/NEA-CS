@@ -265,7 +265,7 @@ def load_accounts(path = ACCOUNTS_PATH):
         return data
     
 
-
+#misc util functions
 def isAdmin(user_level):
     return user_level in ("Admin", "Super Admin")
 
@@ -281,6 +281,9 @@ def canEditItem(user_level, permission_mode):
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+def normalise_tags(tag_text):
+    return [tag.strip().lower() for tag in tag_text.split(",") if tag.strip()]
 
 class InitialAccountCreation(QDialog):
     def __init__(self, accounts_path = ACCOUNTS_PATH):
@@ -356,6 +359,7 @@ class InitialAccountCreation(QDialog):
         p = self.password.text()
         c = self.confirm.text()
 
+        #password requirements
         if len(u) < 3:
             QMessageBox.warning(self, "Invalid username", "Username must be at least 3 characters.")
             return
@@ -366,6 +370,7 @@ class InitialAccountCreation(QDialog):
             QMessageBox.warning(self, "Mismatch", "Passwords do not match.")
             return
 
+        #add account to registry if not returned/failed requirements.
         accounts = load_accounts(self.accounts_path)
         accounts[u] = {"password_hash": hash_password(p),
                        "user_level": "Super Admin"}
@@ -771,7 +776,7 @@ class ItemEditorDialog(QDialog):
         qty_unit_row.addLayout(unit_box, 1)
 
         price_box = QVBoxLayout()
-        price_box.addWidget(QLabel("Price"))
+        price_box.addWidget(QLabel("Price (£)"))
         self.price_spin = QDoubleSpinBox()
         self.price_spin.setRange(0.00, 999.99)
         self.price_spin.setDecimals(2)
@@ -807,6 +812,12 @@ class ItemEditorDialog(QDialog):
         low_perm_row.addLayout(low_box)
         low_perm_row.addLayout(perm_box, 1)
 
+        tags_box = QVBoxLayout()
+        tags_box.addWidget(QLabel("Tags"))
+        self.tags_edit = QLineEdit()
+        self.tags_edit.setPlaceholderText("Enter tags separated by commas")
+        tags_box.addWidget(self.tags_edit)
+
         qr_title = QLabel("Generate QR/Barcode")
         qr_row = QHBoxLayout()
         qr_row.setSpacing(10)
@@ -821,6 +832,7 @@ class ItemEditorDialog(QDialog):
         left_col.addLayout(qty_unit_row)
         left_col.addLayout(price_box)
         left_col.addLayout(low_perm_row)
+        left_col.addLayout(tags_box)
         left_col.addWidget(qr_title)
         left_col.addLayout(qr_row)
         left_col.addStretch(1)
@@ -914,6 +926,7 @@ class ItemEditorDialog(QDialog):
             "low_stock": self.low_stock_combo.currentText(),
             "threshold": self.low_threshold_spin.value(),
             "permission_mode": self.permission_combo.currentText(),
+            "tags": self.tags_edit.text().strip(),
             "image_filename": self.image_filename or ""
         }
 
@@ -949,6 +962,53 @@ class ItemEditorDialog(QDialog):
         scaled = pix.scaled(QSize(390, 230), Qt.KeepAspectRatio)
         self.image_label.setPixmap(scaled)
         self.add_image_btn.hide()
+
+    def load_item_tags(self):
+        query = QSqlQuery()
+        query.prepare("""
+            SELECT tags.tag_name
+            FROM tags
+            INNER JOIN items_tags ON tags.tag_id = items_tags.tag_id
+            WHERE items_tags.item_id = ?
+            ORDER BY tags.tag_name COLLATE NOCASE
+        """)
+        query.addBindValue(self.item_id)
+        query.exec_()
+
+        tags = []
+        while query.next():
+            tags.append(str(query.value(0)))
+
+        self.tags_edit.setText(", ".join(tags))
+
+
+    def save_item_tags(self, item_id):
+        tags = normalise_tags(self.tags_edit.text())
+
+        delete_query = QSqlQuery()
+        delete_query.prepare("DELETE FROM items_tags WHERE item_id = ?")
+        delete_query.addBindValue(item_id)
+        delete_query.exec_()
+
+        for tag_name in tags:
+            insert_tag_query = QSqlQuery()
+            insert_tag_query.prepare("INSERT OR IGNORE INTO tags (tag_name) VALUES (?)")
+            insert_tag_query.addBindValue(tag_name)
+            insert_tag_query.exec_()
+
+            tag_id_query = QSqlQuery()
+            tag_id_query.prepare("SELECT tag_id FROM tags WHERE tag_name = ?")
+            tag_id_query.addBindValue(tag_name)
+            tag_id_query.exec_()
+            tag_id_query.next()
+            tag_id = int(tag_id_query.value(0))
+
+            link_query = QSqlQuery()
+            link_query.prepare("INSERT INTO items_tags (item_id, tag_id) VALUES (?, ?)")
+            link_query.addBindValue(item_id)
+            link_query.addBindValue(tag_id)
+            link_query.exec_()
+
 
     def load_item(self):
         query = QSqlQuery()
@@ -987,6 +1047,7 @@ class ItemEditorDialog(QDialog):
         self.modified_label.setText(f"last modified: {updated}" if updated else "last modified: -")
 
         self.update_low_stock_state()
+        self.load_item_tags()
 
         self.image_filename = image_path if image_path else None
         if image_path:
@@ -1026,6 +1087,15 @@ class ItemEditorDialog(QDialog):
 
         if reply != QMessageBox.Yes:
             return
+
+        link_query = QSqlQuery()
+        link_query.prepare("DELETE FROM items_tags WHERE item_id = ?")
+        link_query.addBindValue(self.item_id)
+        link_query.exec_()
+
+        tags_query = QSqlQuery()
+        tags_query.prepare("DELETE FROM tags WHERE tag_id NOT IN (SELECT DISTINCT tag_id FROM items_tags)")
+        tags_query.exec_()
 
         query = QSqlQuery()
         query.prepare("DELETE FROM items WHERE item_id = ?")
@@ -1077,6 +1147,10 @@ class ItemEditorDialog(QDialog):
             query.addBindValue(self.image_filename)
             query.addBindValue(updated)
             query.exec_()
+
+            self.item_id = int(query.lastInsertId())
+            self.save_item_tags(self.item_id)
+
         else:
             query.prepare("""
                 UPDATE items
@@ -1096,6 +1170,8 @@ class ItemEditorDialog(QDialog):
             query.addBindValue(updated)
             query.addBindValue(self.item_id)
             query.exec_()
+
+            self.save_item_tags(self.item_id)
 
         self.accept()
 
@@ -1407,11 +1483,14 @@ class SearchPage(QWidget):
             "Price High-Low"
         ])
 
+        self.tag_filter = QLineEdit()
+
         form.addRow("Qty min", self.qty_min)
         form.addRow("Qty max", self.qty_max)
         form.addRow("Price min", self.price_min)
         form.addRow("Price max", self.price_max)
         form.addRow("Sort by", self.sort_by)
+        form.addRow("Filter by tag", self.tag_filter)
 
         filter_layout.addLayout(form)
 
@@ -1456,6 +1535,7 @@ class SearchPage(QWidget):
         self.price_min.valueChanged.connect(self.apply_filters)
         self.price_max.valueChanged.connect(self.apply_filters)
         self.sort_by.currentIndexChanged.connect(self.apply_filters)
+        self.tag_filter.textChanged.connect(self.apply_filters)
         self.clear_filters_btn.clicked.connect(self.clear_filters)
 
         self.apply_filters()
@@ -1472,10 +1552,12 @@ class SearchPage(QWidget):
         self.price_min.setValue(0.00)
         self.price_max.setValue(999.99)
         self.sort_by.setCurrentIndex(0)
+        self.tag_filter.clear()
         self.apply_filters()
 
     def apply_filters(self):
         search_text = self.query.text().strip().lower()
+        tag_text = self.tag_filter.text().strip().lower()
         qty_min = self.qty_min.value()
         qty_max = self.qty_max.value()
         price_min = self.price_min.value()
@@ -1490,24 +1572,27 @@ class SearchPage(QWidget):
             price_max = price_min
             self.price_max.setValue(price_max)
 
-        order_command = "name COLLATE NOCASE ASC"
+        order_command = "items.name COLLATE NOCASE ASC"
         if sort_text == "Name Z-A":
-            order_command = "name COLLATE NOCASE DESC"
+            order_command = "items.name COLLATE NOCASE DESC"
         elif sort_text == "Quantity Low-High":
-            order_command = "quantity ASC"
+            order_command = "items.quantity ASC"
         elif sort_text == "Quantity High-Low":
-            order_command = "quantity DESC"
+            order_command = "items.quantity DESC"
         elif sort_text == "Price Low-High":
-            order_command = "price ASC"
+            order_command = "items.price ASC"
         elif sort_text == "Price High-Low":
-            order_command = "price DESC"
+            order_command = "items.price DESC"
 
         sql = f"""
-            SELECT item_id, name, quantity, price, image_path, permission_mode
+            SELECT DISTINCT items.item_id, items.name, items.quantity, items.price, items.image_path, items.permission_mode
             FROM items
-            WHERE LOWER(name) LIKE ?
-              AND quantity BETWEEN ? AND ?
-              AND price BETWEEN ? AND ?
+            LEFT JOIN items_tags ON items.item_id = items_tags.item_id
+            LEFT JOIN tags ON items_tags.tag_id = tags.tag_id
+            WHERE LOWER(items.name) LIKE ?
+            AND items.quantity BETWEEN ? AND ?
+            AND items.price BETWEEN ? AND ?
+            AND LOWER(COALESCE(tags.tag_name, '')) LIKE ?
             ORDER BY {order_command}
         """
 
@@ -1518,6 +1603,7 @@ class SearchPage(QWidget):
         query.addBindValue(qty_max)
         query.addBindValue(price_min)
         query.addBindValue(price_max)
+        query.addBindValue(f"%{tag_text}%")
         query.exec_()
 
         cards = []
@@ -1633,7 +1719,7 @@ class MainWindow(QMainWindow):
         root.addWidget(main, 1)
 
         #navigation behavior
-        self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.nav.currentRowChanged.connect(self.on_nav_changed)
 
         #set a slightly larger default font for the whole app
         f = QFont()
@@ -1643,6 +1729,14 @@ class MainWindow(QMainWindow):
     def open_settings(self):
         dlg = Settings(current_user_level=self.current_user_level, accounts_path=ACCOUNTS_PATH)
         dlg.exec_()
+    
+    def on_nav_changed(self, index):
+        self.pages.setCurrentIndex(index)
+
+        if index == 1:  #items page
+            self.items_page.load_cards_from_db()
+        elif index == 2:  #search page
+            self.search_page.clear_filters()
 
 #assembling the final result to be run
 def main():
