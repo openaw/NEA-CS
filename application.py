@@ -650,7 +650,7 @@ def make_card(title, kpi, caption):
     layout.addWidget(card_num)
     layout.addWidget(card_caption)
     layout.addStretch(1)
-    return card
+    return card, card_num
 
 #function to create repeatable list card based widgets. layouts of widgets within cards and styles defined
 def make_reorder_table(title, height=220):
@@ -665,21 +665,11 @@ def make_reorder_table(title, height=220):
     card_title.setProperty("class", "CardTitle")
     layout.addWidget(card_title)
 
-    demo = [
-        ("Record1", 2),
-        ("Record2", 0),
-        ("Record3", 1),
-    ]
-    
     table = QTableWidget()
     table.setMinimumHeight(height)
     table.setColumnCount(2)
     table.setHorizontalHeaderLabels(["Item", "Quantity"])
-    table.setRowCount(len(demo))
-
-    for x, (name, stock) in enumerate(demo):
-        table.setItem(x, 0, QTableWidgetItem(str(name)))
-        table.setItem(x, 1, QTableWidgetItem(str(stock)))
+    table.setRowCount(0)
 
     table.setEditTriggers(QTableWidget.NoEditTriggers)
     table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -688,7 +678,7 @@ def make_reorder_table(title, height=220):
     table.verticalHeader().setVisible(False)
 
     layout.addWidget(table, 1)
-    return card
+    return card, table
 
 #function to create repeatable chart card based widgets. layouts of widgets within cards and styles defined
 #placeholder until data visuals with Matplotlib are implemented
@@ -1200,21 +1190,80 @@ class DashboardPage(QWidget):
 
         root.addLayout(header)
 
-        #main statistic cards laid out in grid
         grid = QGridLayout()
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(14)
 
-        #KPI card placeholder
-        grid.addWidget(make_card("Total Inventory Value", "150", "(£) total"), 0, 0)
-        grid.addWidget(make_card("Total Inventory", "20", "items"), 0, 1)
-        grid.addWidget(make_card("Total Inventory in Stock", "10", "items"), 0, 2)
-        grid.addWidget(make_reorder_table("Reorder List"), 0, 3)
+        self.total_value_card, self.total_value_label = make_card("Total Inventory Value", "£0.00", "Sum of inventory price")
+        self.total_inventory_card, self.total_inventory_label = make_card("Total Inventory", "0", "Total entries in the database")
+        self.in_stock_card, self.in_stock_label = make_card("Total Quantity in Stock", "0", "Total available quantity in the database")
+        self.reorder_card, self.reorder_table = make_reorder_table("Reorder List")
+
+        grid.addWidget(self.total_value_card, 0, 0)
+        grid.addWidget(self.total_inventory_card, 0, 1)
+        grid.addWidget(self.in_stock_card, 0, 2)
+        grid.addWidget(self.reorder_card, 0, 3)
+
         root.addLayout(grid)
 
-        #bottom row chart placeholder (wide)
         bottom = make_chart("Top 10 Inventory (Quantity)", height=300)
         root.addWidget(bottom)
+
+        self.refresh_dashboard()
+
+    def refresh_dashboard(self):
+        self.load_summary_cards()
+        self.load_reorder_table()
+
+    def load_summary_cards(self):
+        query = QSqlQuery()
+
+        #total inventory value = sum of price of all items
+        total_value = 0.0
+        query.exec_("SELECT COALESCE(SUM(price*quantity), 0) FROM items")
+        if query.next():
+            total_value = float(query.value(0) or 0)
+
+        #total inventory = total rows in items
+        total_inventory = 0
+        query.exec_("SELECT COUNT(*) FROM items")
+        if query.next():
+            total_inventory = int(query.value(0) or 0)
+
+        #total inventory in stock = sum of quantity column
+        in_stock = 0
+        query.exec_("SELECT COALESCE(SUM(quantity), 0) FROM items")
+        if query.next():
+            in_stock = int(query.value(0) or 0)
+
+        self.total_value_label.setText(f"£{total_value:.2f}")
+        self.total_inventory_label.setText(str(total_inventory))
+        self.in_stock_label.setText(str(in_stock))
+
+    def load_reorder_table(self):
+        query = QSqlQuery()
+        query.prepare("""
+            SELECT name, quantity
+            FROM items
+            WHERE low_stock = 1
+              AND quantity < threshold
+            ORDER BY quantity ASC, name COLLATE NOCASE ASC
+        """)
+        query.exec_()
+
+        rows = []
+        while query.next():
+            name = str(query.value(0) or "")
+            quantity = int(query.value(1) or 0)
+            rows.append((name, quantity))
+
+        self.reorder_table.setRowCount(len(rows))
+
+        for row_index, (name, quantity) in enumerate(rows):
+            self.reorder_table.setItem(row_index, 0, QTableWidgetItem(name))
+            self.reorder_table.setItem(row_index, 1, QTableWidgetItem(str(quantity)))
+
+        self.reorder_table.resizeColumnsToContents()
 
 class ItemCards(QPushButton):
     def __init__(self, item_id, name, quantity, price, image_filename):
@@ -1733,7 +1782,9 @@ class MainWindow(QMainWindow):
     def on_nav_changed(self, index):
         self.pages.setCurrentIndex(index)
 
-        if index == 1:  #items page
+        if index == 0:  #dashboard page
+            self.dashboard_page.refresh_dashboard()
+        elif index == 1:  #items page
             self.items_page.load_cards_from_db()
         elif index == 2:  #search page
             self.search_page.clear_filters()
