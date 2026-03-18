@@ -266,6 +266,44 @@ def load_accounts(path = ACCOUNTS_PATH):
             data = json.load(file)
         return data
     
+def initialise_database():
+    query = QSqlQuery()
+
+    #ensure foreign key support enabled in case of deletion in link table
+    query.exec_("PRAGMA foreign_keys = ON")
+
+    query.exec_("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id INTEGER PRIMARY KEY,
+            name TEXT,
+            quantity INTEGER,
+            unit TEXT,
+            price REAL,
+            notes TEXT,
+            low_stock BOOLEAN,
+            threshold INTEGER,
+            permission_mode TEXT,
+            image_path TEXT,
+            updated TEXT
+        )
+    """)
+
+    query.exec_("""
+        CREATE TABLE IF NOT EXISTS tags (
+            tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tag_name TEXT NOT NULL UNIQUE
+        )
+    """)
+
+    query.exec_("""
+        CREATE TABLE IF NOT EXISTS items_tags (
+            item_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (item_id, tag_id),
+            FOREIGN KEY (item_id) REFERENCES items(item_id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(tag_id) ON DELETE CASCADE
+        )
+    """)
 
 #misc util functions
 def isAdmin(user_level):
@@ -323,14 +361,17 @@ class InitialAccountCreation(QDialog):
 
         self.username = QLineEdit()
         self.username.setPlaceholderText("Username (min 3 chars)")
+        self.username.returnPressed.connect(self.create_account)
 
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("Password (min 6 chars)")
+        self.password.returnPressed.connect(self.create_account)
 
         self.confirm = QLineEdit()
         self.confirm.setEchoMode(QLineEdit.Password)
         self.confirm.setPlaceholderText("Confirm password")
+        self.confirm.returnPressed.connect(self.create_account)
 
         form.addWidget(QLabel("Username"), 0, 0)
         form.addWidget(self.username, 0, 1)
@@ -345,9 +386,13 @@ class InitialAccountCreation(QDialog):
         btn_row.addStretch(1)
 
         exit_btn = QPushButton("Exit")
+        exit_btn.setAutoDefault(False)
+        exit_btn.setDefault(False)
         exit_btn.clicked.connect(self.reject)
 
         create_btn = QPushButton("Create account")
+        create_btn.setAutoDefault(False)
+        create_btn.setDefault(False)
         create_btn.clicked.connect(self.create_account)
 
         btn_row.addWidget(exit_btn)
@@ -418,10 +463,12 @@ class SignIn(QDialog):
 
         self.username = QLineEdit()
         self.username.setPlaceholderText("Username")
+        self.username.returnPressed.connect(self.sign_in)
 
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("Password")
+        self.password.returnPressed.connect(self.sign_in)
 
         form.addWidget(QLabel("Username"), 0, 0)
         form.addWidget(self.username, 0, 1)
@@ -434,9 +481,13 @@ class SignIn(QDialog):
         btn_row.addStretch(1)
 
         exit_btn = QPushButton("Exit")
+        exit_btn.setAutoDefault(False)
+        exit_btn.setDefault(False)
         exit_btn.clicked.connect(self.reject)
 
         sign_in_btn = QPushButton("Sign in")
+        sign_in_btn.setAutoDefault(False)
+        sign_in_btn.setDefault(False)
         sign_in_btn.clicked.connect(self.sign_in)
 
         btn_row.addWidget(exit_btn)
@@ -498,14 +549,17 @@ class CreateAccount(QDialog):
 
         self.username = QLineEdit()
         self.username.setPlaceholderText("Username (min 3 chars)")
+        self.username.returnPressed.connect(self.create_account)
 
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("Password (min 6 chars)")
+        self.password.returnPressed.connect(self.create_account)
 
         self.confirm = QLineEdit()
         self.confirm.setEchoMode(QLineEdit.Password)
         self.confirm.setPlaceholderText("Confirm password")
+        self.confirm.returnPressed.connect(self.create_account)
 
         form.addWidget(QLabel("Username"), 0, 0)
         form.addWidget(self.username, 0, 1)
@@ -536,9 +590,13 @@ class CreateAccount(QDialog):
         btn_row.addStretch(1)
 
         cancel_btn = QPushButton("Cancel")
+        cancel_btn.setAutoDefault(False)
+        cancel_btn.setDefault(False)
         cancel_btn.clicked.connect(self.reject)
 
         create_btn = QPushButton("Create account")
+        create_btn.setAutoDefault(False)
+        create_btn.setDefault(False)
         create_btn.clicked.connect(self.create_account)
 
         btn_row.addWidget(cancel_btn)
@@ -806,14 +864,6 @@ class ItemEditorDialog(QDialog):
         self.tags_edit.setPlaceholderText("Enter tags separated by commas")
         tags_box.addWidget(self.tags_edit)
 
-        qr_title = QLabel("Generate QR/Barcode")
-        qr_row = QHBoxLayout()
-        qr_row.setSpacing(10)
-        self.qr_btn = QPushButton("QR")
-        self.barcode_btn = QPushButton("Barcode")
-        qr_row.addWidget(self.qr_btn)
-        qr_row.addWidget(self.barcode_btn)
-
         left_col.addWidget(title_lbl)
         left_col.addWidget(self.name_edit)
         left_col.addWidget(self.id_label)
@@ -821,8 +871,6 @@ class ItemEditorDialog(QDialog):
         left_col.addLayout(price_box)
         left_col.addLayout(low_perm_row)
         left_col.addLayout(tags_box)
-        left_col.addWidget(qr_title)
-        left_col.addLayout(qr_row)
         left_col.addStretch(1)
 
         #right side options
@@ -1523,11 +1571,8 @@ class SearchPage(QWidget):
         top_row = QHBoxLayout()
         self.query = QLineEdit()
         self.query.setPlaceholderText("Search item name...")
-        self.search_btn = QPushButton("Search")
-        self.search_btn.setCursor(Qt.PointingHandCursor)
 
         top_row.addWidget(self.query, 1)
-        top_row.addWidget(self.search_btn)
         root.addLayout(top_row)
 
         content_row = QHBoxLayout()
@@ -1629,7 +1674,6 @@ class SearchPage(QWidget):
         root.addLayout(content_row, 1)
 
         self.query.textChanged.connect(self.apply_filters)
-        self.search_btn.clicked.connect(self.apply_filters)
 
         self.qty_min.valueChanged.connect(self.apply_filters)
         self.qty_max.valueChanged.connect(self.apply_filters)
@@ -1851,6 +1895,8 @@ def main():
     if not database.open():
         QMessageBox.critical(None, "Database Error", "Could not open trackstock.db")
         sys.exit(0)
+
+    initialise_database()
 
     #decide which dialog to show
     if load_accounts(ACCOUNTS_PATH):
