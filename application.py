@@ -1,4 +1,4 @@
-import sys, os, json, hashlib, shutil
+import sys, os, json, hashlib, shutil, matplotlib.style
 from datetime import datetime
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QPixmap
@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import (
     QRadioButton, QScrollArea, QSizePolicy, QComboBox, QFormLayout, QSpinBox,
     QDoubleSpinBox, QTextEdit, QFileDialog
 )
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import matplotlib.pyplot as plt
 
 QSS = """
 /* overall general theme. QSS will be ported via file later when accessibility settings implemented*/
@@ -680,9 +682,8 @@ def make_reorder_table(title, height=220):
     layout.addWidget(table, 1)
     return card, table
 
-#function to create repeatable chart card based widgets. layouts of widgets within cards and styles defined
-#placeholder until data visuals with Matplotlib are implemented
-def make_chart(title, height=220):
+#function to create chart card based widgets. layouts of widgets within cards and styles defined
+def make_chart(title, height=300):
     box = QFrame()
     box.setProperty("class", "Card")
     layout = QVBoxLayout(box)
@@ -692,22 +693,19 @@ def make_chart(title, height=220):
     card_title = QLabel(title)
     card_title.setProperty("class", "CardTitle")
 
-    chart = QFrame()
-    chart.setProperty("class", "ChartBox")
-    chart.setMinimumHeight(height)
+    matplotlib.style.use("dark_background")
 
-    inner = QVBoxLayout(chart)
-    inner.setContentsMargins(10, 10, 10, 10)
-    hint = QLabel("Chart placeholder")
-    hint.setObjectName("Subtle")
-    hint.setAlignment(Qt.AlignCenter)
-    inner.addStretch(1)
-    inner.addWidget(hint)
-    inner.addStretch(1)
+    fig, ax = plt.subplots(figsize=(8, 4), dpi=100)
+    fig.patch.set_facecolor("#121a24")
+    ax.set_facecolor("#0b1016")
+
+    canvas = FigureCanvas(fig)
+    canvas.setMinimumHeight(height)
+    canvas.setStyleSheet("background: transparent; border: none;")
 
     layout.addWidget(card_title)
-    layout.addWidget(chart)
-    return box
+    layout.addWidget(canvas)
+    return box, fig, ax, canvas
 
 class ItemEditorDialog(QDialog):
     def __init__(self, current_user_level, current_username, item_id=None):
@@ -1206,14 +1204,15 @@ class DashboardPage(QWidget):
 
         root.addLayout(grid)
 
-        bottom = make_chart("Top 10 Inventory (Quantity)", height=300)
-        root.addWidget(bottom)
+        self.chart_card, self.chart_fig, self.chart_ax, self.chart_canvas = make_chart("Top 10 Inventory (Quantity)", height=300)
+        root.addWidget(self.chart_card)
 
         self.refresh_dashboard()
 
     def refresh_dashboard(self):
         self.load_summary_cards()
         self.load_reorder_table()
+        self.load_top_items_chart()
 
     def load_summary_cards(self):
         query = QSqlQuery()
@@ -1264,6 +1263,59 @@ class DashboardPage(QWidget):
             self.reorder_table.setItem(row_index, 1, QTableWidgetItem(str(quantity)))
 
         self.reorder_table.resizeColumnsToContents()
+
+    def load_top_items_chart(self):
+        query = QSqlQuery()
+        query.prepare("""
+            SELECT name, quantity
+            FROM items
+            ORDER BY quantity DESC, name COLLATE NOCASE ASC
+            LIMIT 10
+        """)
+        query.exec_()
+
+        names = []
+        quantities = []
+
+        while query.next():
+            names.append(str(query.value(0) or ""))
+            quantities.append(int(query.value(1) or 0))
+
+        ax = self.chart_ax
+        fig = self.chart_fig
+
+        ax.clear()
+        ax.set_facecolor("#0b1016")
+        fig.patch.set_facecolor("#121a24")
+
+        if not names:
+            ax.text(
+                0.5, 0.5,
+                "No inventory data available",
+                ha="center", va="center",
+                transform=ax.transAxes,
+                fontsize=12
+            )
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.spines["top"].set_visible(False)
+            ax.spines["bottom"].set_visible(False)
+            ax.spines["left"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+        else:
+            ax.bar(names, quantities)
+            ax.set_ylabel("Quantity")
+            ax.set_xlabel("Item")
+            ax.tick_params(axis="x", rotation=30)
+            ax.grid(True, axis="y", linestyle="--", alpha=0.25)
+
+            ax.spines["top"].set_visible(False)
+            ax.spines["bottom"].set_visible(False)
+            ax.spines["left"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+
+        fig.tight_layout()
+        self.chart_canvas.draw()
 
 class ItemCards(QPushButton):
     def __init__(self, item_id, name, quantity, price, image_filename):
