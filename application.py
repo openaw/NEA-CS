@@ -8,244 +8,13 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
     QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox,
     QRadioButton, QScrollArea, QSizePolicy, QComboBox, QFormLayout, QSpinBox,
-    QDoubleSpinBox, QTextEdit, QFileDialog
+    QDoubleSpinBox, QTextEdit, QFileDialog, QHeaderView
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 
-QSS = """
-/* overall general theme. QSS will be ported via file later when accessibility settings implemented*/
 
-/*##########Global##########*/
-QWidget {
-    background: #0f141b;
-    color: #d7dde8;
-    font-family: Inter, Segoe UI, Arial;
-    font-size: 17px;
-}
-
-QLabel {
-    background: transparent;
-}
-
-QMainWindow {
-    background: #0f141b;
-}
-
-/* CSS styles for specifically targeted widgets */
-/* # to identify for unique elements and . to identify styling over multiple widgets */
-
-/*##########Sidebar##########*/
-#Sidebar {
-    background: #0b1016;
-    border-right: 1px solid rgba(255,255,255,0.06);
-}
-
-#Brand {
-    font-size: 28px;
-    font-weight: 700;
-    padding: 14px 14px;
-    color: #eef3ff;
-}
-
-QListWidget#NavList {
-    background: transparent;
-    border: none;
-    padding: 6px;
-    outline: none;
-}
-
-QPushButton#ProfileFooter {
-    text-align: left;
-    background: #121a24;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 10px;
-}
-
-QListWidget#NavList::item {
-    padding: 10px 12px;
-    margin: 4px 6px;
-    border-radius: 10px;
-    color: rgba(215,221,232,0.90);
-}
-
-QListWidget#NavList::item:hover {
-    background: rgba(255,255,255,0.05);
-}
-
-QListWidget#NavList::item:selected {
-    background: rgba(118, 142, 255, 0.18);
-    border: 1px solid rgba(118, 142, 255, 0.28);
-    color: #f1f5ff;
-}
-
-QPushButton#ProfileFooter:hover {
-    background: rgba(255,255,255,0.05);
-}
-
-QPushButton#ProfileFooter:pressed {
-    background: rgba(255,255,255,0.03);
-}
-
-/*##########Content##########*/
-#PageTitle {
-    font-size: 35px;
-    font-weight: 700;
-    color: #eef3ff;
-}
-
-#Subtle {
-    color: rgba(215,221,232,0.72);
-}
-
-/*##########Cards##########*/
-.Card {
-    background: #121a24;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
-}
-
-.CardTitle {
-    font-size: 15px;
-    font-weight: 700;
-    color: rgba(238,243,255,0.95);
-}
-
-.CardKPI {
-    font-size: 26px;
-    font-weight: 800;
-    color: #eef3ff;
-}
-
-.CardCaption {
-    color: rgba(215,221,232,0.65);
-}
-
-/*##########Charts##########*/
-.ChartBox {
-    background: rgba(11,16,22,0.65);
-    border: 1px dashed rgba(255,255,255,0.10);
-    border-radius: 12px;
-}
-
-/*##########List##########*/
-QTableWidget {
-    background: transparent;
-    border: none;
-}
-
-QHeaderView::section {
-    background: rgba(11,16,22,0.65);
-    border: none;
-    padding: 8px 10px;
-    font-weight: 700;
-    color: rgba(238,243,255,0.95);
-}
-
-QTableWidget::item {
-    padding: 8px 10px;
-}
-
-QTableWidget::item:selected {
-    background: rgba(118, 142, 255, 0.18);
-}
-
-/*##########Item Cards########## */
-.ItemCard {
-    background: #121a24;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-}
-
-.ItemCard:hover {
-    background: rgba(118, 142, 255, 0.25);
-    border: 1px solid rgba(118, 142, 255, 0.40);
-}
-
-.ItemCard:pressed {
-    background: rgba(118, 142, 255, 0.14);
-}
-
-.ItemName {
-    font-size: 16px;
-    font-weight: 800;
-    color: rgba(238,243,255,0.95);
-}
-
-.ItemQtyPrice {
-    font-size: 13px;
-    font-weight: 700;
-    color: rgba(215,221,232,0.75);
-}
-
-.ItemImageFrame {
-    background: rgba(11,16,22,0.6);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
-}
-
-/*##########Item Modification##########*/
-QTextEdit {
-    background: #0b1016;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 9px 12px;
-}
-
-QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QTextEdit:disabled {
-    background: rgba(255,255,255,0.05);
-    color: rgba(215,221,232,0.50);
-}
-
-#ImagePreviewFrame {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-}
-
-#ImagePreviewLabel {
-    background: transparent;
-}
-
-/*##########Inputs / Buttons on pages##########*/
-QLineEdit {
-    background: #0b1016;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 9px 12px;
-}
-
-QPushButton {
-    background: rgba(118, 142, 255, 0.18);
-    border: 1px solid rgba(118, 142, 255, 0.28);
-    border-radius: 10px;
-    padding: 9px 12px;
-    font-weight: 700;
-}
-
-QPushButton:hover {
-    background: rgba(118, 142, 255, 0.25);
-    border: 1px solid rgba(118, 142, 255, 0.40);
-}
-
-QPushButton:pressed {
-    background: rgba(118, 142, 255, 0.14);
-}
-
-QComboBox, QSpinBox, QDoubleSpinBox {
-    background: #0b1016;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 6px 10px;
-}
-
-QComboBox::drop-down {
-    border: none;
-}
-"""
-
-
-#Variables and functions concerning directories & linking files
+#variables and functions concerning directories & linking files
 ACCOUNTS_PATH = "accounts.json"
 
 def app_dir():
@@ -304,6 +73,13 @@ def initialise_database():
             FOREIGN KEY (tag_id) REFERENCES tags(tag_id) ON DELETE CASCADE
         )
     """)
+
+def load_qss(filename="dark.qss"):
+    path = os.path.join(app_dir(), filename)
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+QSS = load_qss()
 
 #misc util functions
 def isAdmin(user_level):
@@ -691,31 +467,37 @@ class Settings(QDialog):
 def make_card(title, kpi, caption):
     card = QFrame()
     card.setProperty("class", "Card")
+    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+    card.setMinimumHeight(140)
 
     layout = QVBoxLayout(card)
-    layout.setContentsMargins(16, 14, 16, 14)
+    layout.setContentsMargins(12, 10, 12, 10)
     layout.setSpacing(6)
 
     card_title = QLabel(title)
     card_title.setProperty("class", "CardTitle")
+    card_title.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+    card_title.setWordWrap(True)
 
     card_num = QLabel(kpi)
     card_num.setProperty("class", "CardKPI")
+    card_num.setAlignment(Qt.AlignCenter)
 
     card_caption = QLabel(caption)
     card_caption.setProperty("class", "CardCaption")
     card_caption.setWordWrap(True)
+    card_caption.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
 
-    layout.addWidget(card_title)
-    layout.addWidget(card_num)
-    layout.addWidget(card_caption)
-    layout.addStretch(1)
+    layout.addWidget(card_title, 0)
+    layout.addWidget(card_num, 1)
+    layout.addWidget(card_caption, 0)
     return card, card_num
 
 #function to create repeatable list card based widgets. layouts of widgets within cards and styles defined
-def make_reorder_table(title, height=220):
+def make_reorder_table(title, height=200):
     card = QFrame()
     card.setProperty("class", "Card")
+    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
     layout = QVBoxLayout(card)
     layout.setContentsMargins(16, 14, 16, 14)
@@ -723,6 +505,7 @@ def make_reorder_table(title, height=220):
 
     card_title = QLabel(title)
     card_title.setProperty("class", "CardTitle")
+    card_title.setAlignment(Qt.AlignCenter)
     layout.addWidget(card_title)
 
     table = QTableWidget()
@@ -736,6 +519,9 @@ def make_reorder_table(title, height=220):
     table.setSelectionMode(QTableWidget.SingleSelection)
     table.setShowGrid(False)
     table.verticalHeader().setVisible(False)
+
+    table.horizontalHeader().setStretchLastSection(True)
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
     layout.addWidget(table, 1)
     return card, table
@@ -1236,21 +1022,20 @@ class DashboardPage(QWidget):
 
         root.addLayout(header)
 
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(14)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(14)
 
         self.total_value_card, self.total_value_label = make_card("Total Inventory Value", "£0.00", "Sum of inventory price")
         self.total_inventory_card, self.total_inventory_label = make_card("Total Inventory", "0", "Total entries in the database")
         self.in_stock_card, self.in_stock_label = make_card("Total Quantity in Stock", "0", "Total available quantity in the database")
         self.reorder_card, self.reorder_table = make_reorder_table("Reorder List")
 
-        grid.addWidget(self.total_value_card, 0, 0)
-        grid.addWidget(self.total_inventory_card, 0, 1)
-        grid.addWidget(self.in_stock_card, 0, 2)
-        grid.addWidget(self.reorder_card, 0, 3)
+        top_row.addWidget(self.total_value_card, 1)
+        top_row.addWidget(self.total_inventory_card, 1)
+        top_row.addWidget(self.in_stock_card, 1)
+        top_row.addWidget(self.reorder_card, 2)
 
-        root.addLayout(grid)
+        root.addLayout(top_row)
 
         self.chart_card, self.chart_fig, self.chart_ax, self.chart_canvas = make_chart("Top 10 Inventory (Quantity)", height=300)
         root.addWidget(self.chart_card)
@@ -1353,7 +1138,6 @@ class DashboardPage(QWidget):
         else:
             ax.bar(names, quantities)
             ax.set_ylabel("Quantity")
-            ax.set_xlabel("Item")
             ax.tick_params(axis="x", rotation=30)
             ax.grid(True, axis="y", linestyle="--", alpha=0.25)
 

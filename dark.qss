@@ -1,0 +1,228 @@
+/* overall general theme. QSS ported to main*/
+
+/*##########Global##########*/
+QWidget {
+    background: #0f141b;
+    color: #d7dde8;
+    font-family: Inter, Segoe UI, Arial;
+    font-size: 17px;
+}
+
+QLabel {
+    background: transparent;
+}
+
+QMainWindow {
+    background: #0f141b;
+}
+
+/* CSS styles for specifically targeted widgets */
+/* # to identify for unique elements and . to identify styling over multiple widgets */
+
+/*##########Sidebar##########*/
+#Sidebar {
+    background: #0b1016;
+    border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+#Brand {
+    font-size: 28px;
+    font-weight: 700;
+    padding: 14px 14px;
+    color: #eef3ff;
+}
+
+QListWidget#NavList {
+    background: transparent;
+    border: none;
+    padding: 6px;
+    outline: none;
+}
+
+QPushButton#ProfileFooter {
+    text-align: left;
+    background: #121a24;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+}
+
+QListWidget#NavList::item {
+    padding: 10px 12px;
+    margin: 4px 6px;
+    border-radius: 10px;
+    color: rgba(215,221,232,0.90);
+}
+
+QListWidget#NavList::item:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+QListWidget#NavList::item:selected {
+    background: rgba(118, 142, 255, 0.18);
+    border: 1px solid rgba(118, 142, 255, 0.28);
+    color: #f1f5ff;
+}
+
+QPushButton#ProfileFooter:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+QPushButton#ProfileFooter:pressed {
+    background: rgba(255,255,255,0.03);
+}
+
+/*##########Content##########*/
+#PageTitle {
+    font-size: 35px;
+    font-weight: 700;
+    color: #eef3ff;
+}
+
+#Subtle {
+    color: rgba(215,221,232,0.72);
+}
+
+/*##########Cards##########*/
+.Card {
+    background: #121a24;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+}
+
+.CardTitle {
+    font-size: 15px;
+    font-weight: 700;
+    color: rgba(238,243,255,0.95);
+}
+
+.CardKPI {
+    font-size: 40px;
+    font-weight: 800;
+    color: #eef3ff;
+}
+
+.CardCaption {
+    color: rgba(215,221,232,0.65);
+}
+
+/*##########Charts##########*/
+.ChartBox {
+    background: rgba(11,16,22,0.65);
+    border: 1px dashed rgba(255,255,255,0.10);
+    border-radius: 12px;
+}
+
+/*##########List##########*/
+QTableWidget {
+    background: transparent;
+    border: none;
+}
+
+QHeaderView::section {
+    background: rgba(11,16,22,0.65);
+    border: none;
+    padding: 8px 10px;
+    font-weight: 700;
+    color: rgba(238,243,255,0.95);
+}
+
+QTableWidget::item {
+    padding: 8px 10px;
+}
+
+QTableWidget::item:selected {
+    background: rgba(118, 142, 255, 0.18);
+}
+
+/*##########Item Cards########## */
+.ItemCard {
+    background: #121a24;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+}
+
+.ItemCard:hover {
+    background: rgba(118, 142, 255, 0.25);
+    border: 1px solid rgba(118, 142, 255, 0.40);
+}
+
+.ItemCard:pressed {
+    background: rgba(118, 142, 255, 0.14);
+}
+
+.ItemName {
+    font-size: 16px;
+    font-weight: 800;
+    color: rgba(238,243,255,0.95);
+}
+
+.ItemQtyPrice {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(215,221,232,0.75);
+}
+
+.ItemImageFrame {
+    background: rgba(11,16,22,0.6);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+}
+
+/*##########Item Modification##########*/
+QTextEdit {
+    background: #0b1016;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 9px 12px;
+}
+
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QTextEdit:disabled {
+    background: rgba(255,255,255,0.05);
+    color: rgba(215,221,232,0.50);
+}
+
+#ImagePreviewFrame {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+}
+
+#ImagePreviewLabel {
+    background: transparent;
+}
+
+/*##########Inputs / Buttons on pages##########*/
+QLineEdit {
+    background: #0b1016;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 9px 12px;
+}
+
+QPushButton {
+    background: rgba(118, 142, 255, 0.18);
+    border: 1px solid rgba(118, 142, 255, 0.28);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-weight: 700;
+}
+
+QPushButton:hover {
+    background: rgba(118, 142, 255, 0.25);
+    border: 1px solid rgba(118, 142, 255, 0.40);
+}
+
+QPushButton:pressed {
+    background: rgba(118, 142, 255, 0.14);
+}
+
+QComboBox, QSpinBox, QDoubleSpinBox {
+    background: #0b1016;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 6px 10px;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
