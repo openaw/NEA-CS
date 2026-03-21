@@ -1,6 +1,6 @@
 import sys, os, json, hashlib, shutil, matplotlib.style
 from datetime import datetime
-from PyQt5.QtCore import Qt, QSize, QSettings
+from PyQt5.QtCore import Qt, QSize, QSettings, QRect, QPoint
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
 from PyQt5.QtWidgets import (
@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QGridLayout, QListWidget, QListWidgetItem,
     QStackedWidget, QTableWidget, QTableWidgetItem, QDialog, QMessageBox,
     QRadioButton, QScrollArea, QSizePolicy, QComboBox, QFormLayout, QSpinBox,
-    QDoubleSpinBox, QTextEdit, QFileDialog, QHeaderView
+    QDoubleSpinBox, QTextEdit, QFileDialog, QHeaderView, QLayout
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
@@ -40,7 +40,7 @@ def load_accounts(path = ACCOUNTS_PATH):
             data = json.load(file)
         return data
     
-def initialise_database():
+def initialise_database():  #creating database in case it doesnt already exist
     query = QSqlQuery()
 
     #ensure foreign key support enabled in case of deletion in link table
@@ -79,6 +79,8 @@ def initialise_database():
         )
     """)
 
+
+#theme swapping functions
 def load_qss(filename="dark.qss"):
     path = os.path.join(app_dir(), filename)
     with open(path, "r", encoding="utf-8") as f:
@@ -128,6 +130,15 @@ def hash_password(password):
 def normalise_tags(tag_text):
     return [tag.strip().lower() for tag in tag_text.split(",") if tag.strip()]
 
+#AI helper function for flow layout
+def clear_layout(layout):
+    while layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        if widget is not None:
+            widget.deleteLater()
+
+#window dialog for creating account when no accounts exist
 class InitialAccountCreation(QDialog):
     def __init__(self, accounts_path = ACCOUNTS_PATH):
         super().__init__()
@@ -138,6 +149,7 @@ class InitialAccountCreation(QDialog):
         self.setModal(True)
         self.resize(520, 360)
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -204,6 +216,7 @@ class InitialAccountCreation(QDialog):
         card_layout.addLayout(btn_row)
         root.addWidget(card)
 
+    #writing to registry new account details
     def create_account(self):
         u = self.username.text().strip()
         p = self.password.text()
@@ -230,6 +243,7 @@ class InitialAccountCreation(QDialog):
         self.created_username = u
         self.accept()
 
+#window dialog for signing in when accounts already exist
 class SignIn(QDialog):
     def __init__(self, accounts_path = ACCOUNTS_PATH):
         super().__init__()
@@ -240,6 +254,7 @@ class SignIn(QDialog):
         self.setModal(True)
         self.resize(520, 320)
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -299,6 +314,7 @@ class SignIn(QDialog):
         card_layout.addLayout(btn_row)
         root.addWidget(card)
 
+    #compare usernames and passwords to registry, accept dialog and continue program if correct
     def sign_in(self):
         u = self.username.text().strip()
         p = self.password.text()
@@ -317,6 +333,7 @@ class SignIn(QDialog):
         self.signed_in_userlevel = accounts[u].get("user_level")
         self.accept()
 
+#window dialog to create new accounts when logged in as admin
 class CreateAccount(QDialog):
     def __init__(self, accounts_path=ACCOUNTS_PATH):
         super().__init__()
@@ -326,6 +343,7 @@ class CreateAccount(QDialog):
         self.setModal(True)
         self.resize(520, 420)
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -373,7 +391,6 @@ class CreateAccount(QDialog):
 
         card_layout.addLayout(form)
 
-        #role radio buttons (rb)
         role_row = QHBoxLayout()
         role_row.setSpacing(12)
 
@@ -408,6 +425,7 @@ class CreateAccount(QDialog):
         card_layout.addLayout(btn_row)
         root.addWidget(card)
 
+    #make sure username and password meet requirements, write to registry if valid
     def create_account(self):
         u = self.username.text().strip()
         p = self.password.text()
@@ -441,6 +459,7 @@ class CreateAccount(QDialog):
             json.dump(accounts, f, indent=2)
         self.accept()
 
+#window dialog to open buttons for settings options
 class Settings(QDialog):
     def __init__(self, current_user_level, accounts_path=ACCOUNTS_PATH):
         super().__init__()
@@ -451,6 +470,7 @@ class Settings(QDialog):
         self.setModal(True)
         self.resize(420, 260)
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(12)
@@ -469,7 +489,7 @@ class Settings(QDialog):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(10)
 
-        #only Admin/Super Admin can create accounts
+        #only Admin/Super Admin can create accounts, otherwise button not added
         if self.current_user_level == "Super Admin" or self.current_user_level == "Admin":
             create_btn = QPushButton("Create account")
             create_btn.clicked.connect(self.open_create_account)
@@ -486,8 +506,8 @@ class Settings(QDialog):
 
         root.addWidget(card)
 
+    #close settings, then open create account dialog
     def open_create_account(self):
-        #close settings, then open create account dialog
         self.accept()
         dlg = CreateAccount(accounts_path=self.accounts_path)
         dlg.exec_()
@@ -496,7 +516,7 @@ class Settings(QDialog):
 def make_card(title, kpi, caption):
     card = QFrame()
     card.setProperty("class", "Card")
-    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)    #cards expand to fill space when window size changed
     card.setMinimumHeight(140)
 
     layout = QVBoxLayout(card)
@@ -526,7 +546,7 @@ def make_card(title, kpi, caption):
 def make_reorder_table(title, height=200):
     card = QFrame()
     card.setProperty("class", "Card")
-    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)    #cards expand to fill space when window size changed
 
     layout = QVBoxLayout(card)
     layout.setContentsMargins(16, 14, 16, 14)
@@ -569,7 +589,7 @@ def make_chart(title, height=300):
     matplotlib.style.use("dark_background")
 
     fig, ax = plt.subplots(figsize=(8, 4), dpi=100)
-    fig.patch.set_facecolor("#121a24")
+    fig.patch.set_facecolor("#121a24")  #colour hardcoded, will not change with rest of QSS theme
     ax.set_facecolor("#0b1016")
 
     canvas = FigureCanvas(fig)
@@ -580,6 +600,7 @@ def make_chart(title, height=300):
     layout.addWidget(canvas)
     return box, fig, ax, canvas
 
+#window dialog to make edits to existing records or to new records
 class ItemEditorDialog(QDialog):
     def __init__(self, current_user_level, current_username, item_id=None):
         super().__init__()
@@ -594,6 +615,7 @@ class ItemEditorDialog(QDialog):
         self.setModal(True)
         self.resize(900, 620)
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -706,7 +728,7 @@ class ItemEditorDialog(QDialog):
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setScaledContents(False)
         self.image_label.setCursor(Qt.PointingHandCursor)
-        self.image_label.mousePressEvent = self.image_label_clicked
+        self.image_label.mousePressEvent = self.image_label_clicked     #allow changing photo again after photo initially added
 
         self.add_image_btn = QPushButton("Add Image +")
         self.add_image_btn.setFixedSize(160, 42)
@@ -738,7 +760,7 @@ class ItemEditorDialog(QDialog):
 
         self.delete_btn = QPushButton("Delete")
         self.delete_btn.clicked.connect(self.delete_item)
-        self.delete_btn.setVisible(self.item_id is not None)
+        self.delete_btn.setVisible(self.item_id is not None)    #disable deleting non-existent records
 
         btn_row.addWidget(self.delete_btn)
         btn_row.addStretch(1)
@@ -757,8 +779,9 @@ class ItemEditorDialog(QDialog):
         root.addWidget(page)
 
         self.low_stock_combo.currentTextChanged.connect(self.update_low_stock_state)
-        self.update_low_stock_state()
+        self.update_low_stock_state()   #allow setting minimum threshold if the feature is turned on
 
+        #load the item if it already exists in the database, otherwise keep fields empty as adding new record
         if self.item_id is not None:
             self.load_item()
         else:
@@ -766,7 +789,7 @@ class ItemEditorDialog(QDialog):
 
         self.initial_state = self.get_form_state()
 
-
+    #compare current values in field compared to what it was when item was opened
     def get_form_state(self):
         return {
             "name": self.name_edit.text().strip(),
@@ -799,6 +822,7 @@ class ItemEditorDialog(QDialog):
         filename = os.path.basename(file_path)
         dest_path = os.path.join(images_dir(), filename)
 
+        #renaming conflicting file names too complex, so just avoid
         if os.path.exists(dest_path):
             QMessageBox.warning(self, "Duplicate Image", "An image with this name already exists.")
             return
@@ -814,6 +838,7 @@ class ItemEditorDialog(QDialog):
         self.image_label.setPixmap(scaled)
         self.add_image_btn.hide()
 
+    #additional processing for tags as seperate tags need to be shown as list and from different table
     def load_item_tags(self):
         query = QSqlQuery()
         query.prepare("""
@@ -827,20 +852,22 @@ class ItemEditorDialog(QDialog):
         query.exec_()
 
         tags = []
-        while query.next():
+        while query.next():     #insert each tag into list
             tags.append(str(query.value(0)))
 
         self.tags_edit.setText(", ".join(tags))
 
-
+    #additional processing for tags as list need to be shown as separate tags and from different table
     def save_item_tags(self, item_id):
         tags = normalise_tags(self.tags_edit.text())
 
+        #wipe existing tags to replace with new
         delete_query = QSqlQuery()
         delete_query.prepare("DELETE FROM items_tags WHERE item_id = ?")
         delete_query.addBindValue(item_id)
         delete_query.exec_()
 
+        #insert new tags details
         for tag_name in tags:
             insert_tag_query = QSqlQuery()
             insert_tag_query.prepare("INSERT OR IGNORE INTO tags (tag_name) VALUES (?)")
@@ -860,7 +887,7 @@ class ItemEditorDialog(QDialog):
             link_query.addBindValue(tag_id)
             link_query.exec_()
 
-
+    #prefill entry fields if existing item
     def load_item(self):
         query = QSqlQuery()
         query.prepare("""
@@ -873,6 +900,7 @@ class ItemEditorDialog(QDialog):
         query.exec_()
         query.next()
 
+        #store query results to variables to set inside widgets. Set to default value if null in database
         item_id = query.value(0)
         name = str(query.value(1) or "")
         quantity = int(query.value(2) or 0)
@@ -939,6 +967,7 @@ class ItemEditorDialog(QDialog):
         if reply != QMessageBox.Yes:
             return
 
+        #execute delete queries if hasnt been returned yet due to failing conditions
         link_query = QSqlQuery()
         link_query.prepare("DELETE FROM items_tags WHERE item_id = ?")
         link_query.addBindValue(self.item_id)
@@ -979,6 +1008,7 @@ class ItemEditorDialog(QDialog):
 
         query = QSqlQuery()
 
+        #new item
         if self.item_id is None:
             query.prepare("""
                 INSERT INTO items (
@@ -1002,6 +1032,7 @@ class ItemEditorDialog(QDialog):
             self.item_id = int(query.lastInsertId())
             self.save_item_tags(self.item_id)
 
+        #existing item
         else:
             query.prepare("""
                 UPDATE items
@@ -1030,6 +1061,8 @@ class ItemEditorDialog(QDialog):
 class DashboardPage(QWidget):
     def __init__(self):
         super().__init__()
+        
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -1071,6 +1104,7 @@ class DashboardPage(QWidget):
 
         self.refresh_dashboard()
 
+    #keep stats up to date, run each time dashboard loaded
     def refresh_dashboard(self):
         self.load_summary_cards()
         self.load_reorder_table()
@@ -1112,6 +1146,7 @@ class DashboardPage(QWidget):
         """)
         query.exec_()
 
+        #add results into list as pair
         rows = []
         while query.next():
             name = str(query.value(0) or "")
@@ -1120,6 +1155,7 @@ class DashboardPage(QWidget):
 
         self.reorder_table.setRowCount(len(rows))
 
+        #set each row to pair of results
         for row_index, (name, quantity) in enumerate(rows):
             self.reorder_table.setItem(row_index, 0, QTableWidgetItem(name))
             self.reorder_table.setItem(row_index, 1, QTableWidgetItem(str(quantity)))
@@ -1150,6 +1186,7 @@ class DashboardPage(QWidget):
         ax.set_facecolor("#0b1016")
         fig.patch.set_facecolor("#121a24")
 
+        #chart designs with and without data
         if not names:
             ax.text(
                 0.5, 0.5,
@@ -1178,9 +1215,12 @@ class DashboardPage(QWidget):
         fig.tight_layout()
         self.chart_canvas.draw()
 
+#initialisation and layout/styles of item cards
 class ItemCards(QPushButton):
     def __init__(self, item_id, name, quantity, price, image_filename):
         super().__init__()
+
+        #widget initialisation and layout
         self.item_id = item_id
         self.setCursor(Qt.PointingHandCursor)
         self.setProperty("class", "ItemCard")
@@ -1220,6 +1260,98 @@ class ItemCards(QPushButton):
         outer.addWidget(self.qty_label)
         outer.addWidget(self.price_label)
         outer.addStretch(1)
+
+#AI flow layout card grid solution
+class FlowLayout(QLayout):
+    def __init__(self, parent=None, margin=0, hspacing=14, vspacing=14):
+        super().__init__(parent)
+        self._items = []
+        self._hspacing = hspacing
+        self._vspacing = vspacing
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientations(Qt.Orientation(0))
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        margins = self.contentsMargins()
+
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+
+        size += QSize(margins.left() + margins.right(),
+                      margins.top() + margins.bottom())
+        return size
+
+    def horizontalSpacing(self):
+        return self._hspacing
+
+    def verticalSpacing(self):
+        return self._vspacing
+
+    def _do_layout(self, rect, test_only):
+        margins = self.contentsMargins()
+        effective_rect = rect.adjusted(
+            margins.left(), margins.top(),
+            -margins.right(), -margins.bottom()
+        )
+
+        x = effective_rect.x()
+        y = effective_rect.y()
+        line_height = 0
+
+        for item in self._items:
+            widget = item.widget()
+            space_x = self.horizontalSpacing()
+            space_y = self.verticalSpacing()
+
+            item_size = item.sizeHint()
+            next_x = x + item_size.width() + space_x
+
+            if next_x - space_x > effective_rect.right() and line_height > 0:
+                x = effective_rect.x()
+                y += line_height + space_y
+                next_x = x + item_size.width() + space_x
+                line_height = 0
+
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item_size))
+
+            x = next_x
+            line_height = max(line_height, item_size.height())
+
+        total_height = y + line_height - rect.y() + margins.bottom()
+        return total_height
 
 #widget that maintains uniform spaced grid. Recalculate columns on resize
 class CardGrid(QWidget):
@@ -1266,13 +1398,14 @@ class CardGrid(QWidget):
             c = i % cols
             self.grid.addWidget(cardContent, r, c)
 
-
+#initialisation and layout/styles of items tab
 class ItemsPage(QWidget):
     def __init__(self, current_user_level, current_username):
         super().__init__()
         self.current_user_level = current_user_level
         self.current_username = current_username
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -1306,15 +1439,11 @@ class ItemsPage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
 
-        container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(0)
+        self.cards_container = QWidget()
+        self.flow_layout = FlowLayout(self.cards_container, margin=10, hspacing=14, vspacing=14)
+        self.cards_container.setLayout(self.flow_layout)
 
-        self.card_grid = CardGrid(card_w=240, spacing=14)
-        container_layout.addWidget(self.card_grid, 1)
-
-        scroll.setWidget(container)
+        scroll.setWidget(self.cards_container)
         panel_layout.addWidget(scroll, 1)
         root.addWidget(panel, 1)
 
@@ -1331,6 +1460,8 @@ class ItemsPage(QWidget):
             self.load_cards_from_db()
 
     def load_cards_from_db(self):
+        clear_layout(self.flow_layout)
+
         query = QSqlQuery()
         query.exec_("""
             SELECT item_id, name, quantity, price, image_path, permission_mode
@@ -1338,7 +1469,6 @@ class ItemsPage(QWidget):
             ORDER BY item_id
         """)
 
-        cards = []
         while query.next():
             item_id = int(query.value(0))
             name = str(query.value(1) or "")
@@ -1357,17 +1487,17 @@ class ItemsPage(QWidget):
                 price=price,
                 image_filename=image_fn
             )
-            card.clicked.connect(lambda checked=False, iid=item_id: self.open_edit_item_dialog(iid))
-            cards.append(card)
+            card.clicked.connect(lambda checked=False, iid=item_id: self.open_edit_item_dialog(iid)) #allow each card to run its own version of item editor
+            self.flow_layout.addWidget(card)
 
-        self.card_grid.setCards(cards)
-
+#initialisation and layout/styles of search tab
 class SearchPage(QWidget):
     def __init__(self, current_user_level, current_username):
         super().__init__()
         self.current_user_level = current_user_level
         self.current_username = current_username
 
+        #widget initialisation and layout
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(14)
@@ -1471,15 +1601,11 @@ class SearchPage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
 
-        container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(0)
+        self.cards_container = QWidget()
+        self.flow_layout = FlowLayout(self.cards_container, margin=10, hspacing=14, vspacing=14)
+        self.cards_container.setLayout(self.flow_layout)
 
-        self.card_grid = CardGrid(card_w=240, spacing=14)
-        container_layout.addWidget(self.card_grid, 1)
-
-        scroll.setWidget(container)
+        scroll.setWidget(self.cards_container)
         results_layout.addWidget(scroll, 1)
 
         content_row.addWidget(filter_card)
@@ -1498,6 +1624,7 @@ class SearchPage(QWidget):
 
         self.apply_filters()
 
+    #allow editing records on search page
     def open_edit_item_dialog(self, item_id):
         dlg = ItemEditorDialog(current_user_level=self.current_user_level, current_username=self.current_username, item_id=item_id)
         if dlg.exec_() == QDialog.Accepted:
@@ -1514,6 +1641,8 @@ class SearchPage(QWidget):
         self.apply_filters()
 
     def apply_filters(self):
+        clear_layout(self.flow_layout)
+
         search_text = self.query.text().strip().lower()
         tag_text = self.tag_filter.text().strip().lower()
         qty_min = self.qty_min.value()
@@ -1564,7 +1693,7 @@ class SearchPage(QWidget):
         query.addBindValue(f"%{tag_text}%")
         query.exec_()
 
-        cards = []
+        count = 0
 
         while query.next():
             item_id = int(query.value(0))
@@ -1585,10 +1714,10 @@ class SearchPage(QWidget):
                 image_filename=image_fn
             )
             card.clicked.connect(lambda checked=False, iid=item_id: self.open_edit_item_dialog(iid))
-            cards.append(card)
+            self.flow_layout.addWidget(card)
+            count += 1
 
-        self.card_grid.setCards(cards)
-        self.results_hint.setText(f"{len(cards)} matching item(s)")
+        self.results_hint.setText(f"{count} matching item(s)")
 
 
 #initialisation and layout/styles of the main application and everything other than tabs
@@ -1598,6 +1727,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("TrackStock")
         self.resize(1200, 680)
 
+        #widget initialisation and layout
         #central container
         central = QWidget()
         self.setCentralWidget(central)
