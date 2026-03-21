@@ -1,6 +1,6 @@
 import sys, os, json, hashlib, shutil, matplotlib.style
 from datetime import datetime
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QSettings
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
 from PyQt5.QtWidgets import (
@@ -16,6 +16,11 @@ import matplotlib.pyplot as plt
 
 #variables and functions concerning directories & linking files
 ACCOUNTS_PATH = "accounts.json"
+
+THEMES = {
+    "dark": "dark.qss",
+    "light": "light.qss"
+}
 
 def app_dir():
     return os.path.dirname(os.path.realpath(__file__))
@@ -79,7 +84,29 @@ def load_qss(filename="dark.qss"):
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-QSS = load_qss()
+def get_settings():
+    return QSettings("TrackStock", "TrackStock")
+
+def get_saved_theme():
+    theme = get_settings().value("theme", "dark")
+    return theme
+
+def save_theme(theme_name):
+    get_settings().setValue("theme", theme_name)
+
+def apply_theme(theme_name):
+    app = QApplication.instance()
+    app.setStyleSheet(load_qss(THEMES.get(theme_name, "dark.qss")))
+    app.current_theme = theme_name
+    save_theme(theme_name)
+
+def toggle_theme():
+    app = QApplication.instance()
+    current = getattr(app, "current_theme", get_saved_theme())
+    new_theme = "light" if current == "dark" else "dark"
+    apply_theme(new_theme)
+    return new_theme
+
 
 #misc util functions
 def isAdmin(user_level):
@@ -448,8 +475,10 @@ class Settings(QDialog):
             create_btn.clicked.connect(self.open_create_account)
             card_layout.addWidget(create_btn)
 
-        theme_btn = QPushButton("Change theme")
-        card_layout.addWidget(theme_btn)
+        self.theme_btn = QPushButton()
+        self.theme_btn.setText("Toggle Theme")
+        self.theme_btn.clicked.connect(toggle_theme)
+        card_layout.addWidget(self.theme_btn)
 
         signout_btn = QPushButton("Sign out (Exit)")
         signout_btn.clicked.connect(QApplication.instance().quit)
@@ -1672,7 +1701,8 @@ class MainWindow(QMainWindow):
 #assembling the final result to be run
 def main():
     app = QApplication(sys.argv)
-    app.setStyleSheet(QSS)
+    saved_theme = get_saved_theme()
+    apply_theme(saved_theme)
 
     database = QSqlDatabase.addDatabase("QSQLITE")
     database.setDatabaseName("trackstock.db")
