@@ -571,6 +571,7 @@ def make_reorder_table(title, height=200):
 
     table.horizontalHeader().setStretchLastSection(True)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
     layout.addWidget(table, 1)
     return card, table
